@@ -1,6 +1,7 @@
 pub mod time;
+pub mod error;
 
-use time::DateTime;
+use time::datetime::DateTime;
 
 fn main() {
     
