@@ -7,12 +7,12 @@ enum DateOrTime {
 }
 
 pub struct TimeParser {
-    years: i64,
-    months: i64,
-    days: i64,
-    hours: i64,
-    minutes: i64,
-    seconds: i64
+    pub years: i64,
+    pub months: i64,
+    pub days: i64,
+    pub hours: i64,
+    pub minutes: i64,
+    pub seconds: i64
 }
 
 impl Default for TimeParser {
@@ -29,7 +29,7 @@ impl Default for TimeParser {
 }
 
 impl TimeParser {
-    fn sanitize_timestring(str_arr: &mut Vec<&str>) {
+    fn sanitize_timestr_arr(str_arr: &mut Vec<&str>) {
         // Remove empty elements
         str_arr.retain(|e| !e.trim().is_empty());
     }
@@ -42,9 +42,9 @@ impl TimeParser {
         };
 
         // Process string
-        let mut timestamp_arr: Vec<i64> = vec![0, 0, 0];
+        let mut timestamp_arr: Vec<i64> = Vec::with_capacity(3);
         let mut timestamp_str_arr: Vec<&str> = timestamp.trim().split(separator).collect();
-        TimeParser::sanitize_timestring(&mut timestamp_str_arr);
+        TimeParser::sanitize_timestr_arr(&mut timestamp_str_arr);
 
         // Throw error, if obviously invalid
         if timestamp_str_arr.is_empty() || timestamp_str_arr.len() > 3 {
@@ -54,11 +54,16 @@ impl TimeParser {
         // Try to parse elements
         for i in 0..timestamp_str_arr.len() {
             let val: i64 = timestamp_str_arr[i].trim().parse()?;
+            timestamp_arr.push(val);
+        }
+
+        for _ in 0..3 - timestamp_arr.len() {
             match dot {
-                DateOrTime::Date => timestamp_arr[2 - i] = val,
-                DateOrTime::Time => timestamp_arr[i] = val
+                DateOrTime::Time => timestamp_arr.push(0),
+                DateOrTime::Date => timestamp_arr.insert(0, 0)
             }
         }
+
         Ok(timestamp_arr)
     }
 
@@ -70,7 +75,7 @@ impl TimeParser {
         let mut ts_arr: Vec<&str> = timestamp.trim().split(" ").collect();
 
         // Try to correct bad formatting
-        TimeParser::sanitize_timestring(&mut ts_arr);
+        TimeParser::sanitize_timestr_arr(&mut ts_arr);
 
         // Check if we have an empty or invalid input
         if ts_arr.is_empty() {
@@ -111,25 +116,37 @@ impl TimeParser {
 
 #[cfg(test)]
 mod tests {
-    mod sanitize_timestring {
+    mod sanitize_timestr_arr {
+        use super::super::*;
 
+        #[test]
+        fn returns_correct_array() {
+            let mut timearr = "1-1-1".split("-").collect();
+            TimeParser::sanitize_timestr_arr(&mut timearr);
+            assert_eq!(timearr, ["1", "1", "1"]);
+        }
+
+        #[test]
+        fn removes_empty_members() {
+            let mut timearr = "\n    1-1-1   1:1:1 \t".split(" ").collect();
+            TimeParser::sanitize_timestr_arr(&mut timearr);
+            assert_eq!(timearr, ["1-1-1", "1:1:1"]);
+        }
     }
 
     mod parse_timestamp {
+        use super::super::*;
+
         #[test]
         fn parses_full_date() {
-            use super::super::*;
-
-            let datearr = TimeParser::parse_timestamp("1-1-1", DateOrTime::Date).unwrap();
-            assert_eq!(datearr, [1, 1, 1]);
+            let datearr = TimeParser::parse_timestamp("1-2-3", DateOrTime::Date).unwrap();
+            assert_eq!(datearr, [1, 2, 3]);
         }
 
         #[test]
         fn parses_partial_date() {
-            use super::super::*;
-
-            let mut datearr = TimeParser::parse_timestamp("1-1", DateOrTime::Date).unwrap();
-            assert_eq!(datearr, [0, 1, 1]);
+            let mut datearr = TimeParser::parse_timestamp("1-2", DateOrTime::Date).unwrap();
+            assert_eq!(datearr, [0, 1, 2]);
 
             datearr = TimeParser::parse_timestamp("1", DateOrTime::Date).unwrap();
             assert_eq!(datearr, [0, 0, 1]);
@@ -137,21 +154,93 @@ mod tests {
 
         #[test]
         fn parses_full_time() {
-            use super::super::*;
-
-            let datearr = TimeParser::parse_timestamp("1:1:1", DateOrTime::Time).unwrap();
-            assert_eq!(datearr, [1, 1, 1]);
+            let datearr = TimeParser::parse_timestamp("1:2:3", DateOrTime::Time).unwrap();
+            assert_eq!(datearr, [1, 2, 3]);
         }
 
         #[test]
         fn parses_partial_time() {
-            use super::super::*;
-
-            let mut datearr = TimeParser::parse_timestamp("1:1", DateOrTime::Time).unwrap();
-            assert_eq!(datearr, [1, 1, 0]);
+            let mut datearr = TimeParser::parse_timestamp("1:2", DateOrTime::Time).unwrap();
+            assert_eq!(datearr, [1, 2, 0]);
 
             datearr = TimeParser::parse_timestamp("1", DateOrTime::Time).unwrap();
             assert_eq!(datearr, [1, 0, 0]);
+        }
+    }
+
+    mod from_timestamp {
+        use super::super::*;
+
+        #[test]
+        fn parses_full_timestamp() {
+            let timestamp = "1-2-3 4:5:6";
+            let ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(1, ts_obj.years);
+            assert_eq!(2, ts_obj.months);
+            assert_eq!(3, ts_obj.days);
+            assert_eq!(4, ts_obj.hours);
+            assert_eq!(5, ts_obj.minutes);
+            assert_eq!(6, ts_obj.seconds);
+        }
+
+        #[test]
+        fn parses_partial_timestamp() {
+            let timestamp = "2-3 4:5";
+            let ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(2, ts_obj.months);
+            assert_eq!(3, ts_obj.days);
+            assert_eq!(4, ts_obj.hours);
+            assert_eq!(5, ts_obj.minutes);
+            assert_eq!(0, ts_obj.seconds);
+        }
+
+        #[test]
+        fn parses_edge_case_timestamp() {
+            let timestamp = "1 2";
+            let ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(0, ts_obj.months);
+            assert_eq!(1, ts_obj.days);
+            assert_eq!(2, ts_obj.hours);
+            assert_eq!(0, ts_obj.minutes);
+            assert_eq!(0, ts_obj.seconds);
+        }
+
+        #[test]
+        fn throws_error_on_empty_string() {
+            let ts_obj = TimeParser::from_timestamp("");
+            assert!(ts_obj.is_err());
+        }
+
+        #[test]
+        fn throws_error_on_ambiguous_ts() {
+            let mut ts_obj = TimeParser::from_timestamp("1-2-3 4:5:6 7-8-9 10:11:12");
+            assert!(ts_obj.is_err());
+
+            ts_obj = TimeParser::from_timestamp("1-2-3-4 5:6:7");
+            assert!(ts_obj.is_err());
+
+            ts_obj = TimeParser::from_timestamp("1-2-3 4:5:6:7");
+            assert!(ts_obj.is_err());
+        }
+
+        #[test]
+        fn throws_error_on_invalid_ts() {
+            let mut ts_obj = TimeParser::from_timestamp("One-2-3 4:5:6");
+            assert!(ts_obj.is_err());
+
+            ts_obj = TimeParser::from_timestamp("1-2-3 Five:6:7");
+            assert!(ts_obj.is_err());
+
+            ts_obj = TimeParser::from_timestamp("a-b-c d:e:f");
+            assert!(ts_obj.is_err());
+        }
+
+        #[test]
+        fn tolerates_bad_formatting() {
+            let ts_obj = TimeParser::from_timestamp("   1-2-3  \n  4:5:6  \t");
+            assert!(!ts_obj.is_err());
         }
     }
 }
