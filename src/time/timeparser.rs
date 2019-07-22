@@ -99,6 +99,15 @@ impl TimeParser {
             time_arr = TimeParser::parse_timestamp(ts_arr[1], DateOrTime::Time)?;
         }
 
+        // Convert excess months to years
+        if date_arr[1] >= 12 {
+            let years_f: f32 = date_arr[1] as f32 / 12.0;
+            let years = years_f.floor() as i32;
+
+            date_arr[0] += years;
+            date_arr[1] -= years * 12;
+        }
+
         Ok(TimeParser {
             years: date_arr[0],
             months: date_arr[1],
@@ -249,10 +258,10 @@ mod tests {
             assert_eq!(0, ts_obj.minutes);
             assert_eq!(0, ts_obj.seconds);
 
-            timestamp = "12-0";
+            timestamp = "11-0";
             ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
             assert_eq!(0, ts_obj.years);
-            assert_eq!(12, ts_obj.months);
+            assert_eq!(11, ts_obj.months);
             assert_eq!(0, ts_obj.days);
             assert_eq!(0, ts_obj.hours);
             assert_eq!(0, ts_obj.minutes);
@@ -317,6 +326,17 @@ mod tests {
         fn tolerates_bad_formatting() {
             let ts_obj = TimeParser::from_timestamp("   1-2-3  \n  4:5:6  \t");
             assert!(!ts_obj.is_err());
+        }
+
+        #[test]
+        fn wraps_years() {
+            let mut ts_obj = TimeParser::from_timestamp("12-0").unwrap();
+            assert_eq!(1, ts_obj.years);
+            assert_eq!(0, ts_obj.months);
+
+            ts_obj = TimeParser::from_timestamp("30-0").unwrap();
+            assert_eq!(2, ts_obj.years);
+            assert_eq!(6, ts_obj.months);
         }
     }
 }

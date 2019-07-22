@@ -54,14 +54,11 @@ impl DateTime {
         // Handle months
         if parsed.months > 0 {
             if parsed.months + self.dt.month() as i32 >= 12 {
-                // Calculate the number of passed years
-                let num_years_f: f32 = (parsed.months + self.dt.month() as i32) as f32 / 12.0;
-                let num_years: i32 = num_years_f.floor() as i32;
-
-                self.dt = self.dt.with_year(self.dt.year() + num_years).unwrap();
+                // We cannot have more than 12 months at this point
+                self.dt = self.dt.with_year(self.dt.year() + 1).unwrap();
 
                 // Add or subtract the difference in months
-                self.dt = self.dt.with_month((self.dt.month() as i32 + (parsed.months - num_years * 12)) as u32).unwrap();
+                self.dt = self.dt.with_month((self.dt.month() as i32 + (parsed.months - 12)) as u32).unwrap();
             } else {
                 self.dt = self.dt.with_month(self.dt.month() + parsed.months as u32).unwrap();
             }
@@ -70,6 +67,33 @@ impl DateTime {
         // Add the rest of it as a single duration
         let dur = Duration::seconds(parsed.calc_duration());
         self.dt = self.dt + dur;
+        Ok(())
+    }
+
+    pub fn subtract(&mut self, timestamp: &str) -> Result<(), Box<Error>> {
+        let parsed: TimeParser = TimeParser::from_timestamp(timestamp)?;
+
+        // Handle years
+        if parsed.years > 0 {
+            self.dt = self.dt.with_year(self.dt.year() - parsed.years).unwrap();
+        }
+
+        // Handle months
+        if parsed.months > 0 {
+            if self.dt.month() as i32 - parsed.months <= 0 {
+                // We cannot have more than 12 months at this point
+                self.dt = self.dt.with_year(self.dt.year() - 1).unwrap();
+
+                // Add or subtract the difference in months
+                self.dt = self.dt.with_month((self.dt.month() as i32 + (12 - parsed.months)) as u32).unwrap();
+            } else {
+                self.dt = self.dt.with_month(self.dt.month() - parsed.months as u32).unwrap();
+            }
+        }
+
+        // Subtract the rest of it as a single duration
+        let dur = Duration::seconds(parsed.calc_duration());
+        self.dt = self.dt - dur;
         Ok(())
     }
 
@@ -207,6 +231,48 @@ mod tests {
 
             timeobj.add("20-0").unwrap();
             assert_eq!(timeobj.to_timestamp(None).unwrap(), "2023-09-14 02:40:00");
+        }
+
+        #[test]
+        fn throws_error_on_invalid_ts() {
+            let mut timeobj = DateTime::from_epoch(1_500_000_000);
+            let res = timeobj.add("15?-0");
+            assert!(res.is_err());
+        }
+    }
+
+    mod subtract {
+        use super::super::*;
+
+        #[test]
+        fn subs_duration_from_date() {
+            // 2017-07-14 02:40:00
+            let mut timeobj = DateTime::from_epoch(1_500_000_000);
+            timeobj.subtract("1-2-3 4:5:6").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2016-05-10 22:34:54");
+        }
+
+        #[test]
+        fn wraps_around_year() {
+            let mut timeobj = DateTime::from_epoch(1_500_000_000);
+            timeobj.subtract("15-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2016-04-14 02:40:00");
+
+            timeobj.subtract("30-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2013-10-14 02:40:00");
+
+            timeobj.subtract("11-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2012-11-14 02:40:00");
+
+            timeobj.subtract("20-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2011-03-14 02:40:00");
+        }
+
+        #[test]
+        fn throws_error_on_invalid_ts() {
+            let mut timeobj = DateTime::from_epoch(1_500_000_000);
+            let res = timeobj.subtract("15?-0");
+            assert!(res.is_err());
         }
     }
 }
