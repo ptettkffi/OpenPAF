@@ -1,7 +1,10 @@
 use chrono::{TimeZone, Utc};
 use chrono::DateTime as ChronoDateTime;
+use chrono::Datelike;
+use chrono::Duration;
 use chrono_tz::Tz;
 use std::error::Error;
+use super::timeparser::TimeParser;
 
 const TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
@@ -38,6 +41,36 @@ impl DateTime {
 
     pub fn to_epoch(&self) -> i64 {
         self.dt.timestamp()
+    }
+
+    pub fn add(&mut self, timestamp: &str) -> Result<(), Box<Error>> {
+        let parsed: TimeParser = TimeParser::from_timestamp(timestamp)?;
+
+        // Handle years
+        if parsed.years > 0 {
+            self.dt = self.dt.with_year(self.dt.year() + parsed.years).unwrap();
+        }
+
+        // Handle months
+        if parsed.months > 0 {
+            if parsed.months + self.dt.month() as i32 >= 12 {
+                // Calculate the number of passed years
+                let num_years_f: f32 = (parsed.months + self.dt.month() as i32) as f32 / 12.0;
+                let num_years: i32 = num_years_f.floor() as i32;
+
+                self.dt = self.dt.with_year(self.dt.year() + num_years).unwrap();
+
+                // Add or subtract the difference in months
+                self.dt = self.dt.with_month((self.dt.month() as i32 + (parsed.months - num_years * 12)) as u32).unwrap();
+            } else {
+                self.dt = self.dt.with_month(self.dt.month() + parsed.months as u32).unwrap();
+            }
+        }
+
+        // Add the rest of it as a single duration
+        let dur = Duration::seconds(parsed.calc_duration());
+        self.dt = self.dt + dur;
+        Ok(())
     }
 
 }
@@ -146,6 +179,34 @@ mod tests {
         fn invalid_tz_throws_error() {
             let tz = DateTime::read_timezone(Some("Invalid"));
             assert!(tz.is_err());
+        }
+    }
+
+    mod add {
+        use super::super::*;
+
+        #[test]
+        fn adds_duration_to_date() {
+            // 2017-07-14 02:40:00
+            let mut timeobj = DateTime::from_epoch(1_500_000_000);
+            timeobj.add("1-2-3 4:5:6").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-09-17 06:45:06");
+        }
+
+        #[test]
+        fn wraps_around_year() {
+            let mut timeobj = DateTime::from_epoch(1_500_000_000);
+            timeobj.add("15-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-10-14 02:40:00");
+
+            timeobj.add("30-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2021-04-14 02:40:00");
+
+            timeobj.add("9-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2022-01-14 02:40:00");
+
+            timeobj.add("20-0").unwrap();
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2023-09-14 02:40:00");
         }
     }
 }

@@ -7,12 +7,12 @@ enum DateOrTime {
 }
 
 pub struct TimeParser {
-    pub years: i64,
-    pub months: i64,
-    pub days: i64,
-    pub hours: i64,
-    pub minutes: i64,
-    pub seconds: i64
+    pub years: i32,
+    pub months: i32,
+    pub days: i32,
+    pub hours: i32,
+    pub minutes: i32,
+    pub seconds: i32
 }
 
 impl Default for TimeParser {
@@ -34,7 +34,7 @@ impl TimeParser {
         str_arr.retain(|e| !e.trim().is_empty());
     }
 
-    fn parse_timestamp(timestamp: &str, dot: DateOrTime) -> Result<Vec<i64>, Box<Error>> {
+    fn parse_timestamp(timestamp: &str, dot: DateOrTime) -> Result<Vec<i32>, Box<Error>> {
         // Prepare some variables
         let separator = match dot {
             DateOrTime::Date => "-",
@@ -42,7 +42,7 @@ impl TimeParser {
         };
 
         // Process string
-        let mut timestamp_arr: Vec<i64> = Vec::with_capacity(3);
+        let mut timestamp_arr: Vec<i32> = Vec::with_capacity(3);
         let mut timestamp_str_arr: Vec<&str> = timestamp.trim().split(separator).collect();
         TimeParser::sanitize_timestr_arr(&mut timestamp_str_arr);
 
@@ -53,7 +53,7 @@ impl TimeParser {
 
         // Try to parse elements
         for i in 0..timestamp_str_arr.len() {
-            let val: i64 = timestamp_str_arr[i].trim().parse()?;
+            let val: i32 = timestamp_str_arr[i].trim().parse()?;
             timestamp_arr.push(val);
         }
 
@@ -68,8 +68,8 @@ impl TimeParser {
     }
 
     pub fn from_timestamp(timestamp: &str) -> Result<TimeParser, Box<Error>> {
-        let mut date_arr: Vec<i64> = vec![0, 0, 0];
-        let mut time_arr: Vec<i64> = vec![0, 0, 0];
+        let mut date_arr: Vec<i32> = vec![0, 0, 0];
+        let mut time_arr: Vec<i32> = vec![0, 0, 0];
 
         // Process input string
         let mut ts_arr: Vec<&str> = timestamp.trim().split(" ").collect();
@@ -109,8 +109,15 @@ impl TimeParser {
         })
     }
 
-    pub fn from_epoch(epoch: i64) -> TimeParser {
+    pub fn from_epoch(epoch: i32) -> TimeParser {
         TimeParser{seconds: epoch, ..Default::default()}
+    }
+
+    pub fn calc_duration(&self) -> i64 {
+        let mut secs: i64 = self.days as i64 * 24 * 60 * 60;
+        secs += self.hours as i64 * 60 * 60;
+        secs += self.minutes as i64 * 60;
+        secs + self.seconds as i64
     }
 }
 
@@ -193,6 +200,75 @@ mod tests {
             assert_eq!(4, ts_obj.hours);
             assert_eq!(5, ts_obj.minutes);
             assert_eq!(0, ts_obj.seconds);
+        }
+
+        #[test]
+        fn parses_md() {
+            let timestamp = "2-3";
+            let ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(2, ts_obj.months);
+            assert_eq!(3, ts_obj.days);
+            assert_eq!(0, ts_obj.hours);
+            assert_eq!(0, ts_obj.minutes);
+            assert_eq!(0, ts_obj.seconds);
+        }
+
+        #[test]
+        fn parses_hm() {
+            let timestamp = "2:3";
+            let ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(0, ts_obj.months);
+            assert_eq!(0, ts_obj.days);
+            assert_eq!(2, ts_obj.hours);
+            assert_eq!(3, ts_obj.minutes);
+            assert_eq!(0, ts_obj.seconds);
+        }
+
+        #[test]
+        fn handles_zeroes() {
+            let timestamp = "1-0-0 0:0:5";
+            let ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(1, ts_obj.years);
+            assert_eq!(0, ts_obj.months);
+            assert_eq!(0, ts_obj.days);
+            assert_eq!(0, ts_obj.hours);
+            assert_eq!(0, ts_obj.minutes);
+            assert_eq!(5, ts_obj.seconds);
+        }
+
+        #[test]
+        fn handles_zeroes_in_date() {
+            let mut timestamp = "1-0-0";
+            let mut ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(1, ts_obj.years);
+            assert_eq!(0, ts_obj.months);
+            assert_eq!(0, ts_obj.days);
+            assert_eq!(0, ts_obj.hours);
+            assert_eq!(0, ts_obj.minutes);
+            assert_eq!(0, ts_obj.seconds);
+
+            timestamp = "12-0";
+            ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(12, ts_obj.months);
+            assert_eq!(0, ts_obj.days);
+            assert_eq!(0, ts_obj.hours);
+            assert_eq!(0, ts_obj.minutes);
+            assert_eq!(0, ts_obj.seconds);
+        }
+
+        #[test]
+        fn handles_zeroes_in_time() {
+            let timestamp = "0:0:1";
+            let ts_obj = TimeParser::from_timestamp(timestamp).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(0, ts_obj.months);
+            assert_eq!(0, ts_obj.days);
+            assert_eq!(0, ts_obj.hours);
+            assert_eq!(0, ts_obj.minutes);
+            assert_eq!(1, ts_obj.seconds);
         }
 
         #[test]
