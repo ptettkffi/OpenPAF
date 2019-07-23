@@ -32,7 +32,9 @@ pub struct TimeFreq {
     pub hours: u32,
     pub minutes: u32,
     pub seconds: u32,
-    resolution: Resolution
+    // Resolution is the largest user-provided member in a time or frequency, hence we cannot use zero
+    // value components for determining the resolution
+    pub resolution: Resolution
 }
 
 impl Default for TimeFreq {
@@ -78,19 +80,41 @@ impl TimeFreq {
             timestamp_arr.push(val);
         }
 
-        for _ in 0..3 - timestamp_arr.len() {
-            match dot {
-                DateOrTime::Time => timestamp_arr.push(0),
-                DateOrTime::Date => timestamp_arr.insert(0, 0)
-            }
+        // Provide resolution as a 4th array member
+        let res = 3 - timestamp_arr.len() as u32;
+
+        for _ in 0..res {
+            timestamp_arr.insert(0, 0);
         }
+        timestamp_arr.push(res);
 
         Ok(timestamp_arr)
     }
 
+    fn get_resolution(date_res: u32, time_res: u32) -> Resolution {
+        let res;
+
+        if date_res < 3 {
+            res = match date_res {
+                2 => Resolution::Day,
+                1 => Resolution::Month,
+                0 => Resolution::Year,
+                _ => Resolution::Second
+            }
+        } else {
+            res = match time_res {
+                0 => Resolution::Hour,
+                1 => Resolution::Minute,
+                _ => Resolution::Second
+            }
+        }
+
+        res
+    }
+
     pub fn from_timestamp(timestamp: &str, wrap_years: bool) -> Result<TimeFreq, Box<Error>> {
-        let mut date_arr: Vec<u32> = vec![0, 0, 0];
-        let mut time_arr: Vec<u32> = vec![0, 0, 0];
+        let mut date_arr: Vec<u32> = vec![0, 0, 0, 3];
+        let mut time_arr: Vec<u32> = vec![0, 0, 0, 3];
 
         // Process input string
         let mut ts_arr: Vec<&str> = timestamp.trim().split(" ").collect();
@@ -118,6 +142,12 @@ impl TimeFreq {
         } else {
             date_arr = TimeFreq::parse_timestamp(ts_arr[0], DateOrTime::Date)?;
             time_arr = TimeFreq::parse_timestamp(ts_arr[1], DateOrTime::Time)?;
+
+            // Extra validation for timestamps containing dates and times
+            // In such cases, time strings must be complete to avoid ambiguous notations
+            if time_arr[3] != 0 {
+                return Err(PafError::create_error("Invalid timestamp."));
+            }
         }
 
         // Convert excess months to years
@@ -136,6 +166,7 @@ impl TimeFreq {
             hours: time_arr[0],
             minutes: time_arr[1],
             seconds: time_arr[2],
+            resolution: TimeFreq::get_resolution(date_arr[3], time_arr[3]),
             ..Default::default()
         })
     }
@@ -149,27 +180,6 @@ impl TimeFreq {
         secs += self.hours as i64 * 60 * 60;
         secs += self.minutes as i64 * 60;
         secs + self.seconds as i64
-    }
-
-    pub fn get_resolution(&mut self) -> Resolution {
-        // Cache resolution, if not already cached
-        if self.resolution == Resolution::None {
-            if self.years > 0 {
-                self.resolution = Resolution::Year;
-            } else if self.months > 0 {
-                self.resolution = Resolution::Month;
-            } else if self.days > 0 {
-                self.resolution = Resolution::Day;
-            } else if self.hours > 0 {
-                self.resolution = Resolution::Hour;
-            } else if self.minutes > 0 {
-                self.resolution = Resolution::Minute;
-            } else {
-                self.resolution = Resolution::Second;
-            }
-        }
-
-        self.resolution.clone()
     }
 }
 
@@ -199,31 +209,31 @@ mod tests {
         #[test]
         fn parses_full_date() {
             let datearr = TimeFreq::parse_timestamp("1-2-3", DateOrTime::Date).unwrap();
-            assert_eq!(datearr, [1, 2, 3]);
+            assert_eq!(datearr, [1, 2, 3, 0]);
         }
 
         #[test]
         fn parses_partial_date() {
             let mut datearr = TimeFreq::parse_timestamp("1-2", DateOrTime::Date).unwrap();
-            assert_eq!(datearr, [0, 1, 2]);
+            assert_eq!(datearr, [0, 1, 2, 1]);
 
             datearr = TimeFreq::parse_timestamp("1", DateOrTime::Date).unwrap();
-            assert_eq!(datearr, [0, 0, 1]);
+            assert_eq!(datearr, [0, 0, 1, 2]);
         }
 
         #[test]
         fn parses_full_time() {
             let datearr = TimeFreq::parse_timestamp("1:2:3", DateOrTime::Time).unwrap();
-            assert_eq!(datearr, [1, 2, 3]);
+            assert_eq!(datearr, [1, 2, 3, 0]);
         }
 
         #[test]
         fn parses_partial_time() {
             let mut datearr = TimeFreq::parse_timestamp("1:2", DateOrTime::Time).unwrap();
-            assert_eq!(datearr, [1, 2, 0]);
+            assert_eq!(datearr, [0, 1, 2, 1]);
 
             datearr = TimeFreq::parse_timestamp("1", DateOrTime::Time).unwrap();
-            assert_eq!(datearr, [1, 0, 0]);
+            assert_eq!(datearr, [0, 0, 1, 2]);
         }
     }
 
@@ -244,7 +254,7 @@ mod tests {
 
         #[test]
         fn parses_partial_timestamp() {
-            let timestamp = "2-3 4:5";
+            let timestamp = "2-3 4:5:0";
             let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(2, ts_obj.months);
@@ -267,15 +277,15 @@ mod tests {
         }
 
         #[test]
-        fn parses_hm() {
+        fn parses_ms() {
             let timestamp = "2:3";
             let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(0, ts_obj.months);
             assert_eq!(0, ts_obj.days);
-            assert_eq!(2, ts_obj.hours);
-            assert_eq!(3, ts_obj.minutes);
-            assert_eq!(0, ts_obj.seconds);
+            assert_eq!(0, ts_obj.hours);
+            assert_eq!(2, ts_obj.minutes);
+            assert_eq!(3, ts_obj.seconds);
         }
 
         #[test]
@@ -324,15 +334,10 @@ mod tests {
         }
 
         #[test]
-        fn parses_edge_case_timestamp() {
-            let timestamp = "1 2";
-            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
-            assert_eq!(0, ts_obj.years);
-            assert_eq!(0, ts_obj.months);
-            assert_eq!(1, ts_obj.days);
-            assert_eq!(2, ts_obj.hours);
-            assert_eq!(0, ts_obj.minutes);
-            assert_eq!(0, ts_obj.seconds);
+        fn throws_error_if_time_incomplete_with_date() {
+            let timestamp = "1 2:0";
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true);
+            assert!(ts_obj.is_err());
         }
 
         #[test]
@@ -392,24 +397,15 @@ mod tests {
             assert_eq!(0, ts_obj.years);
             assert_eq!(30, ts_obj.months);
         }
-    }
-
-    mod get_resolution {
-        use super::super::*;
 
         #[test]
         fn sets_resolution() {
-            let mut tf = TimeFreq {years: 10, days: 1, seconds: 30, ..Default::default()};
-            assert!(tf.get_resolution() == Resolution::Year);
+            let mut ts_obj = TimeFreq::from_timestamp("12-0", false).unwrap();
+            assert!(ts_obj.resolution == Resolution::Month);
 
-            tf = TimeFreq {days: 1, seconds: 30, ..Default::default()};
-            assert!(tf.get_resolution() == Resolution::Day);
-        }
+            ts_obj = TimeFreq::from_timestamp("11:30:00", false).unwrap();
+            assert!(ts_obj.resolution == Resolution::Hour);
 
-        #[test]
-        fn defaults_to_second() {
-            let mut tf = TimeFreq {..Default::default()};
-            assert!(tf.get_resolution() == Resolution::Second);
         }
     }
 }
