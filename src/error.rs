@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 pub struct PafError {
-    message: String
+    pub message: String
 }
 
 impl Error for PafError {}
