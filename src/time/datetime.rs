@@ -523,8 +523,31 @@ mod tests {
 
         #[test]
         fn works_in_common_cases() {
-            let now = Utc::now();
-            let dt = DateTime::next_occurrence("");
+            // Will fail at every exact hour, but currently IDC
+            let mut now = Utc::now();
+            let min = now.minute() - 1;
+            let mut dt = DateTime::next_occurrence(&format!("{}:00", min)).unwrap();
+            let mut expected = format!("{}-{:0width$}-{:0width$} {:0width$}:{:0width$}:{}",
+                now.year(), now.month(), now.day(), now.hour() + 1, min, "00", width = 2);
+
+            assert_eq!(dt.to_timestamp(None).unwrap(), expected);
+
+            // TODO: test if it fails between midnight and 1am
+            now = Utc::now();
+            let hr;
+            let mut exp_dt;
+            if now.hour() == 0 {
+                exp_dt = DateTime::now();
+                hr = 1;
+            } else {
+                exp_dt = DateTime::now();
+                exp_dt.add("1 00:00:00").unwrap();
+                hr = now.hour() - 1;
+            }
+            dt = DateTime::next_occurrence(&format!("{}:00:00", hr)).unwrap();
+            expected = format!("{}-{:0width$}-{:0width$} {:0width$}:{:0width$}:{}",
+                exp_dt.dt.year(), exp_dt.dt.month(), exp_dt.dt.day(), hr, "00", "00", width = 2);
+            assert_eq!(dt.to_timestamp(None).unwrap(), expected);
         }
     }
 }
