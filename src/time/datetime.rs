@@ -4,7 +4,7 @@ use chrono::Datelike;
 use chrono::Duration;
 use chrono_tz::Tz;
 use std::error::Error;
-use super::timeparser::TimeParser;
+use super::timefreq::TimeFreq;
 
 const TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
@@ -21,7 +21,7 @@ impl DateTime {
 
     pub fn from_timestamp(ts: &str, timezone: Option<&str>) -> Result<DateTime, Box<Error>> {
         let tz: Tz = DateTime::read_timezone(timezone)?;
-        let dt = tz.datetime_from_str(ts, TIMESTAMP_FORMAT).unwrap().with_timezone(&Utc);
+        let dt = tz.datetime_from_str(ts, TIMESTAMP_FORMAT)?.with_timezone(&Utc);
         Ok(DateTime {dt: dt})
     }
 
@@ -44,23 +44,23 @@ impl DateTime {
     }
 
     pub fn add(&mut self, timestamp: &str) -> Result<(), Box<Error>> {
-        let parsed: TimeParser = TimeParser::from_timestamp(timestamp)?;
+        let parsed: TimeFreq = TimeFreq::from_timestamp(timestamp)?;
 
         // Handle years
         if parsed.years > 0 {
-            self.dt = self.dt.with_year(self.dt.year() + parsed.years).unwrap();
+            self.dt = self.dt.with_year(self.dt.year() + parsed.years as i32).unwrap();
         }
 
         // Handle months
         if parsed.months > 0 {
-            if parsed.months + self.dt.month() as i32 >= 12 {
+            if parsed.months + self.dt.month() >= 12 {
                 // We cannot have more than 12 months at this point
                 self.dt = self.dt.with_year(self.dt.year() + 1).unwrap();
 
                 // Add or subtract the difference in months
-                self.dt = self.dt.with_month((self.dt.month() as i32 + (parsed.months - 12)) as u32).unwrap();
+                self.dt = self.dt.with_month(self.dt.month() + (parsed.months - 12)).unwrap();
             } else {
-                self.dt = self.dt.with_month(self.dt.month() + parsed.months as u32).unwrap();
+                self.dt = self.dt.with_month(self.dt.month() + parsed.months).unwrap();
             }
         }
 
@@ -71,23 +71,23 @@ impl DateTime {
     }
 
     pub fn subtract(&mut self, timestamp: &str) -> Result<(), Box<Error>> {
-        let parsed: TimeParser = TimeParser::from_timestamp(timestamp)?;
+        let parsed: TimeFreq = TimeFreq::from_timestamp(timestamp)?;
 
         // Handle years
         if parsed.years > 0 {
-            self.dt = self.dt.with_year(self.dt.year() - parsed.years).unwrap();
+            self.dt = self.dt.with_year(self.dt.year() - parsed.years as i32).unwrap();
         }
 
         // Handle months
         if parsed.months > 0 {
-            if self.dt.month() as i32 - parsed.months <= 0 {
+            if self.dt.month() - parsed.months <= 0 {
                 // We cannot have more than 12 months at this point
                 self.dt = self.dt.with_year(self.dt.year() - 1).unwrap();
 
                 // Add or subtract the difference in months
-                self.dt = self.dt.with_month((self.dt.month() as i32 + (12 - parsed.months)) as u32).unwrap();
+                self.dt = self.dt.with_month(self.dt.month() + (12 - parsed.months)).unwrap();
             } else {
-                self.dt = self.dt.with_month(self.dt.month() - parsed.months as u32).unwrap();
+                self.dt = self.dt.with_month(self.dt.month() - parsed.months).unwrap();
             }
         }
 
@@ -97,6 +97,9 @@ impl DateTime {
         Ok(())
     }
 
+    pub fn is_passed(&self) -> bool {
+        Utc::now() > self.dt
+    }
 }
 
 #[cfg(test)]
@@ -273,6 +276,22 @@ mod tests {
             let mut timeobj = DateTime::from_epoch(1_500_000_000);
             let res = timeobj.subtract("15?-0");
             assert!(res.is_err());
+        }
+    }
+
+    mod is_passed {
+        use super::super::*;
+
+        #[test]
+        fn returns_false_if_not_passed() {
+            let timeobj = DateTime::from_timestamp("2222-02-02 22:22:22", None).unwrap();
+            assert!(!timeobj.is_passed());
+        }
+
+        #[test]
+        fn returns_true_if_passed() {
+            let timeobj = DateTime::from_timestamp("1972-02-02 22:22:22", None).unwrap();
+            assert!(timeobj.is_passed());
         }
     }
 }

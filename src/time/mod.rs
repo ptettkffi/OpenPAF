@@ -1,2 +1,2 @@
 pub mod datetime;
-pub mod timeparser;
+pub mod timefreq;
