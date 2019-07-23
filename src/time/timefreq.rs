@@ -6,6 +6,18 @@ enum DateOrTime {
     Time
 }
 
+// Enum for the largest non-zero member.
+#[derive(PartialEq, PartialOrd, Clone)]
+pub enum Resolution {
+    Year = 6,
+    Month = 5,
+    Day = 4,
+    Hour = 3,
+    Minute = 2,
+    Second = 1,
+    None = 0
+}
+
 // Struct for storing relative times and frequencies
 // (e.g. 15:00 translates to every 15 hours in frequency and 15:00:00 every day in time)
 // used for scheduling.
@@ -19,7 +31,8 @@ pub struct TimeFreq {
     pub days: u32,
     pub hours: u32,
     pub minutes: u32,
-    pub seconds: u32
+    pub seconds: u32,
+    resolution: Resolution
 }
 
 impl Default for TimeFreq {
@@ -30,7 +43,8 @@ impl Default for TimeFreq {
             days: 0,
             hours: 0,
             minutes: 0,
-            seconds: 0
+            seconds: 0,
+            resolution: Resolution::None
         }
     }
 }
@@ -74,7 +88,7 @@ impl TimeFreq {
         Ok(timestamp_arr)
     }
 
-    pub fn from_timestamp(timestamp: &str) -> Result<TimeFreq, Box<Error>> {
+    pub fn from_timestamp(timestamp: &str, wrap_years: bool) -> Result<TimeFreq, Box<Error>> {
         let mut date_arr: Vec<u32> = vec![0, 0, 0];
         let mut time_arr: Vec<u32> = vec![0, 0, 0];
 
@@ -107,7 +121,7 @@ impl TimeFreq {
         }
 
         // Convert excess months to years
-        if date_arr[1] >= 12 {
+        if wrap_years && date_arr[1] >= 12 {
             let years_f: f32 = date_arr[1] as f32 / 12.0;
             let years = years_f.floor() as u32;
 
@@ -121,7 +135,8 @@ impl TimeFreq {
             days: date_arr[2],
             hours: time_arr[0],
             minutes: time_arr[1],
-            seconds: time_arr[2]
+            seconds: time_arr[2],
+            ..Default::default()
         })
     }
 
@@ -134,6 +149,27 @@ impl TimeFreq {
         secs += self.hours as i64 * 60 * 60;
         secs += self.minutes as i64 * 60;
         secs + self.seconds as i64
+    }
+
+    pub fn get_resolution(&mut self) -> Resolution {
+        // Cache resolution, if not already cached
+        if self.resolution == Resolution::None {
+            if self.years > 0 {
+                self.resolution = Resolution::Year;
+            } else if self.months > 0 {
+                self.resolution = Resolution::Month;
+            } else if self.days > 0 {
+                self.resolution = Resolution::Day;
+            } else if self.hours > 0 {
+                self.resolution = Resolution::Hour;
+            } else if self.minutes > 0 {
+                self.resolution = Resolution::Minute;
+            } else {
+                self.resolution = Resolution::Second;
+            }
+        }
+
+        self.resolution.clone()
     }
 }
 
@@ -197,7 +233,7 @@ mod tests {
         #[test]
         fn parses_full_timestamp() {
             let timestamp = "1-2-3 4:5:6";
-            let ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(1, ts_obj.years);
             assert_eq!(2, ts_obj.months);
             assert_eq!(3, ts_obj.days);
@@ -209,7 +245,7 @@ mod tests {
         #[test]
         fn parses_partial_timestamp() {
             let timestamp = "2-3 4:5";
-            let ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(2, ts_obj.months);
             assert_eq!(3, ts_obj.days);
@@ -221,7 +257,7 @@ mod tests {
         #[test]
         fn parses_md() {
             let timestamp = "2-3";
-            let ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(2, ts_obj.months);
             assert_eq!(3, ts_obj.days);
@@ -233,7 +269,7 @@ mod tests {
         #[test]
         fn parses_hm() {
             let timestamp = "2:3";
-            let ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(0, ts_obj.months);
             assert_eq!(0, ts_obj.days);
@@ -245,7 +281,7 @@ mod tests {
         #[test]
         fn handles_zeroes() {
             let timestamp = "1-0-0 0:0:5";
-            let ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(1, ts_obj.years);
             assert_eq!(0, ts_obj.months);
             assert_eq!(0, ts_obj.days);
@@ -257,7 +293,7 @@ mod tests {
         #[test]
         fn handles_zeroes_in_date() {
             let mut timestamp = "1-0-0";
-            let mut ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let mut ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(1, ts_obj.years);
             assert_eq!(0, ts_obj.months);
             assert_eq!(0, ts_obj.days);
@@ -266,7 +302,7 @@ mod tests {
             assert_eq!(0, ts_obj.seconds);
 
             timestamp = "11-0";
-            ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(11, ts_obj.months);
             assert_eq!(0, ts_obj.days);
@@ -278,7 +314,7 @@ mod tests {
         #[test]
         fn handles_zeroes_in_time() {
             let timestamp = "0:0:1";
-            let ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(0, ts_obj.months);
             assert_eq!(0, ts_obj.days);
@@ -290,7 +326,7 @@ mod tests {
         #[test]
         fn parses_edge_case_timestamp() {
             let timestamp = "1 2";
-            let ts_obj = TimeFreq::from_timestamp(timestamp).unwrap();
+            let ts_obj = TimeFreq::from_timestamp(timestamp, true).unwrap();
             assert_eq!(0, ts_obj.years);
             assert_eq!(0, ts_obj.months);
             assert_eq!(1, ts_obj.days);
@@ -301,49 +337,79 @@ mod tests {
 
         #[test]
         fn throws_error_on_empty_string() {
-            let ts_obj = TimeFreq::from_timestamp("");
+            let ts_obj = TimeFreq::from_timestamp("", true);
             assert!(ts_obj.is_err());
         }
 
         #[test]
         fn throws_error_on_ambiguous_ts() {
-            let mut ts_obj = TimeFreq::from_timestamp("1-2-3 4:5:6 7-8-9 10:11:12");
+            let mut ts_obj = TimeFreq::from_timestamp("1-2-3 4:5:6 7-8-9 10:11:12", true);
             assert!(ts_obj.is_err());
 
-            ts_obj = TimeFreq::from_timestamp("1-2-3-4 5:6:7");
+            ts_obj = TimeFreq::from_timestamp("1-2-3-4 5:6:7", true);
             assert!(ts_obj.is_err());
 
-            ts_obj = TimeFreq::from_timestamp("1-2-3 4:5:6:7");
+            ts_obj = TimeFreq::from_timestamp("1-2-3 4:5:6:7", true);
             assert!(ts_obj.is_err());
         }
 
         #[test]
         fn throws_error_on_invalid_ts() {
-            let mut ts_obj = TimeFreq::from_timestamp("One-2-3 4:5:6");
+            let mut ts_obj = TimeFreq::from_timestamp("One-2-3 4:5:6", true);
             assert!(ts_obj.is_err());
 
-            ts_obj = TimeFreq::from_timestamp("1-2-3 Five:6:7");
+            ts_obj = TimeFreq::from_timestamp("1-2-3 Five:6:7", true);
             assert!(ts_obj.is_err());
 
-            ts_obj = TimeFreq::from_timestamp("a-b-c d:e:f");
+            ts_obj = TimeFreq::from_timestamp("a-b-c d:e:f", true);
             assert!(ts_obj.is_err());
         }
 
         #[test]
         fn tolerates_bad_formatting() {
-            let ts_obj = TimeFreq::from_timestamp("   1-2-3  \n  4:5:6  \t");
+            let ts_obj = TimeFreq::from_timestamp("   1-2-3  \n  4:5:6  \t", true);
             assert!(!ts_obj.is_err());
         }
 
         #[test]
-        fn wraps_years() {
-            let mut ts_obj = TimeFreq::from_timestamp("12-0").unwrap();
+        fn wraps_years_if_requested() {
+            let mut ts_obj = TimeFreq::from_timestamp("12-0", true).unwrap();
             assert_eq!(1, ts_obj.years);
             assert_eq!(0, ts_obj.months);
 
-            ts_obj = TimeFreq::from_timestamp("30-0").unwrap();
+            ts_obj = TimeFreq::from_timestamp("30-0", true).unwrap();
             assert_eq!(2, ts_obj.years);
             assert_eq!(6, ts_obj.months);
+        }
+
+        #[test]
+        fn does_not_wrap_years_if_not_requested() {
+            let mut ts_obj = TimeFreq::from_timestamp("12-0", false).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(12, ts_obj.months);
+
+            ts_obj = TimeFreq::from_timestamp("30-0", false).unwrap();
+            assert_eq!(0, ts_obj.years);
+            assert_eq!(30, ts_obj.months);
+        }
+    }
+
+    mod get_resolution {
+        use super::super::*;
+
+        #[test]
+        fn sets_resolution() {
+            let mut tf = TimeFreq {years: 10, days: 1, seconds: 30, ..Default::default()};
+            assert!(tf.get_resolution() == Resolution::Year);
+
+            tf = TimeFreq {days: 1, seconds: 30, ..Default::default()};
+            assert!(tf.get_resolution() == Resolution::Day);
+        }
+
+        #[test]
+        fn defaults_to_second() {
+            let mut tf = TimeFreq {..Default::default()};
+            assert!(tf.get_resolution() == Resolution::Second);
         }
     }
 }
