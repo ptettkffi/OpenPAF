@@ -1,4 +1,4 @@
-use chrono::{TimeZone, Utc, Datelike, Timelike, Duration};
+use chrono::{TimeZone, Utc, Datelike, Timelike, Duration, NaiveDate};
 use chrono::DateTime as ChronoDateTime;
 use chrono_tz::Tz;
 use std::error::Error;
@@ -21,59 +21,163 @@ impl DateTime {
     /// # Arguments
     /// 
     /// * `timezone` - A string representation of a valid timezone (e.g. UTC, GMT, CET)
-    fn read_timezone(timezone: Option<&str>) -> Result<Tz, Box<Error>> {
-        let tz_str = timezone.unwrap_or("UTC");
+    fn _read_timezone(timezone: Option<&str>) -> Result<Tz, Box<Error>> {
+        let raw_str = timezone.unwrap_or("UTC");
+
+        // For GMT+X and GMT-X timezones, preprend it with Etc/, like in the IANA DB
+        // TODO: Consider inverting the sign
+        let tz_str = if (raw_str.contains("+") || raw_str.contains("-")) && !raw_str.starts_with("Etc/")
+            {String::from("Etc/") + raw_str} else {raw_str.to_string()};
+
         let tz: Tz = tz_str.parse()?;
         Ok(tz)
     }
 
-    fn merge_error(result: Option<ChronoDateTime<Utc>>, msg: String) -> Result<ChronoDateTime<Utc>, Box<PafError>> {
+    fn _merge_error(result: Option<ChronoDateTime<Utc>>, msg: String) -> Result<ChronoDateTime<Utc>, Box<PafError>> {
         if result.is_none() {
             return Err(PafError::create_error(&msg));
         }
-        return Ok(result.unwrap())
+        Ok(result.unwrap())
     }
 
-    fn merge_timefreq(&mut self, timefreq: &TimeFreq) -> Result<(), Box<Error>> {
+    fn _merge_timefreq(&mut self, timefreq: &TimeFreq) -> Result<(), Box<Error>> {
         // Local variables for error handling
         let mut result;
         let res = &timefreq.resolution;
 
-        if res >= &Resolution::Second {
-            result = self.dt.with_second(timefreq.seconds);
-            self.dt = DateTime::merge_error(result, format!("Invalid number of seconds {}.", timefreq.seconds))?;
+        // NOTE: Order matters until hours
+        if res >= &Resolution::Year {
+            result = self.dt.with_year(timefreq.years as i32);
+            self.dt = DateTime::_merge_error(result, format!("Invalid number of years {} in {}{}.", timefreq.years,
+                timefreq.years, self.dt.format("-%m-%d %H:%M:%S")))?;
         }
 
-        if res >= &Resolution::Minute {
-            result = self.dt.with_minute(timefreq.minutes);
-            self.dt = DateTime::merge_error(result, format!("Invalid number of minutes {}.", timefreq.minutes))?;
+        // We do not care about month-day pairing here, as month inputs also
+        // have day inputs, and if the user provides 02-31, it is a user error
+        if res >= &Resolution::Month {
+            result = self.dt.with_month(timefreq.months);
+            self.dt = DateTime::_merge_error(result, format!("Invalid number of months {} in {}{:0w$}{}.", timefreq.months,
+                self.dt.format("%Y-"), timefreq.months, self.dt.format("%m-%d %H:%M:%S"), w = 2))?;
+        }
+
+        if res >= &Resolution::Day {
+            // Handle days with care, since not every month have 31 days
+            result = self.dt.with_day(timefreq.days);
+            if result.is_none() && timefreq.days > self._get_last_day() && timefreq.days <= 31 {
+                // Either we are in February or in a 30 days month with day 31 in the pattern
+                let diff = timefreq.days - self._get_last_day();
+                self._add_months(1);
+                self.dt = self.dt.with_day(diff).unwrap();
+            } else {
+                self.dt = DateTime::_merge_error(result, format!("Invalid number of days {} in {}{:0w$}{}.", timefreq.days,
+                self.dt.format("%Y-%m-"), timefreq.days, self.dt.format(" %H:%M:%S"), w = 2))?;
+            }
         }
 
         if res >= &Resolution::Hour {
             result = self.dt.with_hour(timefreq.hours);
-            self.dt = DateTime::merge_error(result, format!("Invalid number of hours {}.", timefreq.hours))?;
+            self.dt = DateTime::_merge_error(result, format!("Invalid number of hours {} in {}{:0w$}{}.", timefreq.hours,
+                self.dt.format("%Y-%m-%d "), timefreq.hours, self.dt.format(":%M:%S"), w = 2))?;
         }
 
-        if res >= &Resolution::Day {
-            result = self.dt.with_day(timefreq.days);
-            self.dt = DateTime::merge_error(result, format!("Invalid number of days {}.", timefreq.days))?;
+        if res >= &Resolution::Minute {
+            result = self.dt.with_minute(timefreq.minutes);
+            self.dt = DateTime::_merge_error(result, format!("Invalid number of minutes {} in {}{:0w$}{}.", timefreq.minutes,
+                self.dt.format("%Y-%m-%d %H:"), timefreq.minutes, self.dt.format(":%S"), w = 2))?;
         }
 
-        if res >= &Resolution::Month {
-            result = self.dt.with_month(timefreq.months);
-            self.dt = DateTime::merge_error(result, format!("Invalid number of months {}.", timefreq.months))?;
-        }
-
-        if res >= &Resolution::Year {
-            result = self.dt.with_year(timefreq.years as i32);
-            self.dt = DateTime::merge_error(result, format!("Invalid number of years {}.", timefreq.years))?;
+        if res >= &Resolution::Second {
+            result = self.dt.with_second(timefreq.seconds);
+            self.dt = DateTime::_merge_error(result, format!("Invalid number of seconds {} in {}{:0w$}.", timefreq.seconds,
+                self.dt.format("%Y-%m-%d %H:%M:"), timefreq.seconds, w = 2))?;
         }
 
         Ok(())
     }
 
+    fn _get_last_day(&self) -> u32 {
+        NaiveDate::from_ymd_opt(self.dt.year(), self.dt.month() + 1, 1).unwrap_or(
+            NaiveDate::from_ymd(self.dt.year() + 1, 1, 1)).pred().day() as u32
+    }
+
+    fn _add_months(&mut self, months: i32) {
+        // Try to add every month at once
+        let res = self.dt.with_month((self.dt.month() as i32 + months) as u32);
+
+        if let Some(res_dt) = res {
+            self.dt = res_dt;
+        } else {
+            // If it fails, iterate through the months and resolve the error in place
+            for _ in 0..months {
+                self.dt = self.dt.with_month(self.dt.month() + 1).unwrap_or(
+                    self.dt.with_day(self._get_last_day()).unwrap() + Duration::days(
+                        self._get_last_day() as i64
+                    )
+                );
+            }
+        }
+    }
+
+    fn _sub_months(&mut self, months: i32) {
+        // Try to subtract every month at once
+        let res = self.dt.with_month((self.dt.month() as i32 - months) as u32);
+
+        if let Some(res_dt) = res {
+            self.dt = res_dt;
+        } else {
+            // If it fails, iterate through the months and resolve the error in place
+            for _ in 0..months {
+                self.dt = self.dt.with_month(self.dt.month() - 1).unwrap_or(
+                    self.dt.with_day(1).unwrap() - Duration::days(
+                        self._get_last_day() as i64
+                    )
+                );
+            }
+        }
+    }
+
+    fn _next_occurrence(timestamp: &str, ref_date: &DateTime) -> Result<DateTime, Box<Error>> {
+        let parsed: TimeFreq = TimeFreq::from_timestamp(timestamp, false)?;
+
+        // Merge current time with available relative time components
+        // e.g. if it's 2019-01-01 12:00:00 and the relative time is
+        // 23:59:04, the result will be 2019-01-01 23:59:04
+        
+        let mut merged = ref_date.clone();
+        merged._merge_timefreq(&parsed)?;
+
+        // If the previously constructed date and time is passed, add
+        // one cycle according to its resolution
+        // e.g. if the relative time is 23:59:04, add a day
+        if merged.is_passed(Some(&ref_date)) {
+            match parsed.resolution {
+                Resolution::Year => return Err(PafError::create_error("Too specific timestamp, there is no next occurrence.")),
+                Resolution::Month => merged.add("1-0-0 0:0:0").unwrap(),
+                Resolution::Day => {
+                    // We handle month additions differently, as days after 28 are not consistent
+                    // in every month
+                    let mut num_months = 1;
+                    while merged.add(&format!("0-{}-0 0:0:0", num_months)).is_err() {
+                        num_months += 1;
+                    }
+
+                },
+                Resolution::Hour => merged.add("0-0-1 0:0:0").unwrap(),
+                Resolution::Minute => merged.add("1:0:0").unwrap(),
+                Resolution::Second => merged.add("0:1:0").unwrap(),
+                Resolution::None => {}
+            }
+        }
+
+        Ok(merged)
+    }
+
+    pub fn clone(&self) -> Self {
+        Self { dt: self.dt.clone() }
+    }
+
     pub fn from_timestamp(ts: &str, timezone: Option<&str>) -> Result<DateTime, Box<Error>> {
-        let tz: Tz = DateTime::read_timezone(timezone)?;
+        let tz: Tz = DateTime::_read_timezone(timezone)?;
         let dt = tz.datetime_from_str(ts, TIMESTAMP_FORMAT)?.with_timezone(&Utc);
         Ok(DateTime {dt: dt})
     }
@@ -87,7 +191,7 @@ impl DateTime {
     }
 
     pub fn to_timestamp(&self, timezone: Option<&str>) -> Result<String, Box<Error>> {
-        let tz: Tz = DateTime::read_timezone(timezone)?;
+        let tz: Tz = DateTime::_read_timezone(timezone)?;
         let stamp = self.dt.with_timezone(&tz).format(TIMESTAMP_FORMAT).to_string();
         Ok(stamp)
     }
@@ -111,9 +215,9 @@ impl DateTime {
                 self.dt = self.dt.with_year(self.dt.year() + 1).unwrap();
 
                 // Add or subtract the difference in months
-                self.dt = self.dt.with_month((self.dt.month() as i32 + (parsed.months as i32 - 12)) as u32).unwrap();
+                self._add_months(parsed.months as i32 - 12);
             } else {
-                self.dt = self.dt.with_month(self.dt.month() + parsed.months).unwrap();
+                self._add_months(parsed.months as i32);
             }
         }
 
@@ -138,9 +242,10 @@ impl DateTime {
                 self.dt = self.dt.with_year(self.dt.year() - 1).unwrap();
 
                 // Add or subtract the difference in months
-                self.dt = self.dt.with_month((self.dt.month() as i32 + (12 - parsed.months as i32)) as u32).unwrap();
+                // NOTE: Sign here must be negative or months must be added
+                self._add_months(12 - parsed.months as i32);
             } else {
-                self.dt = self.dt.with_month(self.dt.month() - parsed.months).unwrap();
+                self._sub_months(parsed.months as i32);
             }
         }
 
@@ -150,45 +255,18 @@ impl DateTime {
         Ok(())
     }
 
-    pub fn is_passed(&self) -> bool {
-        Utc::now() > self.dt
+    pub fn is_passed(&self, ref_dt: Option<&DateTime>) -> bool {
+        if let Some(dt) = ref_dt {
+            dt.dt > self.dt
+        } else {
+            Utc::now() > self.dt
+        }
     }
 
     pub fn next_occurrence(timestamp: &str) -> Result<DateTime, Box<Error>> {
-        let parsed: TimeFreq = TimeFreq::from_timestamp(timestamp, false)?;
+        let dt = DateTime::now();
 
-        // Merge current time with available relative time components
-        // e.g. if it's 2019-01-01 12:00:00 and the relative time is
-        // 23:59:04, the result will be 2019-01-01 23:59:04
-        let mut dt = DateTime::now();
-        dt.merge_timefreq(&parsed)?;
-
-        // If the previously constructed date and time is passed, add
-        // one cycle according to its resolution
-        // e.g. if the relative time is 23:59:04, add a day
-        if dt.is_passed() {
-            match parsed.resolution {
-                Resolution::Year => return Err(PafError::create_error("Too specific timestamp, there is no next occurrence.")),
-                Resolution::Month => dt.add("1-0-0 0:0:0").unwrap(),
-                Resolution::Day => {
-                    // We handle month additions differently, as days after 28 are not consistent
-                    // in every month
-                    let mut num_months = 1;
-                    let mut res = dt.add(&format!("0-{}-0 0:0:0", num_months));
-                    while res.is_err() {
-                        num_months += 1;
-                        res = dt.add(&format!("0-{}-0 0:0:0", num_months));
-                    }
-
-                },
-                Resolution::Hour => dt.add("0-0-1 0:0:0").unwrap(),
-                Resolution::Minute => dt.add("1:0:0").unwrap(),
-                Resolution::Second => dt.add("0:1:0").unwrap(),
-                Resolution::None => {}
-            }
-        }
-
-        Ok(dt)
+        DateTime::_next_occurrence(timestamp, &dt)
     }
 
 }
@@ -276,26 +354,37 @@ mod tests {
         }
     }
 
-    mod read_timezone {
+    mod _read_timezone {
         use super::super::*;
 
         #[test]
         fn reads_timezone() {
-            let tz = DateTime::read_timezone(Some("CET")).unwrap();
+            let tz = DateTime::_read_timezone(Some("CET")).unwrap();
             let dt = tz.timestamp(1_500_000_000, 0);
             assert_eq!(dt.format("%z").to_string(), "+0200");
         }
 
         #[test]
         fn defaults_to_utc() {
-            let tz = DateTime::read_timezone(None).unwrap();
+            let tz = DateTime::_read_timezone(None).unwrap();
             let dt = tz.timestamp(1_500_000_000, 0);
             assert_eq!(dt.format("%z").to_string(), "+0000");
         }
 
         #[test]
+        fn works_with_offsetted_gmt() {
+            let mut tz = DateTime::_read_timezone(Some("GMT+2")).unwrap();
+            let mut dt = tz.timestamp(1_500_000_000, 0);
+            assert_eq!(dt.format("%z").to_string(), "-0200");
+
+            tz = DateTime::_read_timezone(Some("Etc/GMT-2")).unwrap();
+            dt = tz.timestamp(1_500_000_000, 0);
+            assert_eq!(dt.format("%z").to_string(), "+0200");
+        }
+
+        #[test]
         fn invalid_tz_throws_error() {
-            let tz = DateTime::read_timezone(Some("Invalid"));
+            let tz = DateTime::_read_timezone(Some("Invalid"));
             assert!(tz.is_err());
         }
     }
@@ -376,30 +465,30 @@ mod tests {
         #[test]
         fn returns_false_if_not_passed() {
             let timeobj = DateTime::from_timestamp("2222-02-02 22:22:22", None).unwrap();
-            assert!(!timeobj.is_passed());
+            assert!(!timeobj.is_passed(None));
         }
 
         #[test]
         fn returns_true_if_passed() {
             let timeobj = DateTime::from_timestamp("1972-02-02 22:22:22", None).unwrap();
-            assert!(timeobj.is_passed());
+            assert!(timeobj.is_passed(None));
         }
     }
 
-    mod merge_error {
+    mod _merge_error {
         use super::super::*;
 
         #[test]
         fn returns_result_if_not_null() {
             let chrono_res = Utc::now().with_minute(40);
-            let merge_res = DateTime::merge_error(chrono_res, String::from("Some error message."));
+            let merge_res = DateTime::_merge_error(chrono_res, String::from("Some error message."));
             assert!(merge_res.is_ok())
         }
 
         #[test]
         fn returns_error_if_null() {
             let chrono_res = Utc::now().with_minute(70);
-            let merge_res = DateTime::merge_error(chrono_res, String::from("Some error message."));
+            let merge_res = DateTime::_merge_error(chrono_res, String::from("Some error message."));
             assert!(merge_res.is_err());
 
             let err = merge_res.err().unwrap();
@@ -407,7 +496,7 @@ mod tests {
         }
     }
 
-    mod merge_timefreq {
+    mod _merge_timefreq {
         use super::super::*;
 
         #[test]
@@ -415,7 +504,7 @@ mod tests {
             let old_now = Utc::now();
             let mut dt = DateTime::now();
             let mut tf = TimeFreq::from_timestamp("10", true).unwrap();
-            dt.merge_timefreq(&mut tf).unwrap();
+            dt._merge_timefreq(&mut tf).unwrap();
 
             assert_eq!(dt.dt.second(), 10);
             assert_eq!(dt.dt.minute(), old_now.minute());
@@ -430,7 +519,7 @@ mod tests {
             let old_now = Utc::now();
             let mut dt = DateTime::now();
             let mut tf = TimeFreq::from_timestamp("20:0", true).unwrap();
-            dt.merge_timefreq(&mut tf).unwrap();
+            dt._merge_timefreq(&mut tf).unwrap();
 
             assert_eq!(dt.dt.second(), 0);
             assert_eq!(dt.dt.minute(), 20);
@@ -445,7 +534,7 @@ mod tests {
             let old_now = Utc::now();
             let mut dt = DateTime::now();
             let mut tf = TimeFreq::from_timestamp("12:0:0", true).unwrap();
-            dt.merge_timefreq(&mut tf).unwrap();
+            dt._merge_timefreq(&mut tf).unwrap();
 
             assert_eq!(dt.dt.second(), 0);
             assert_eq!(dt.dt.minute(), 0);
@@ -460,7 +549,7 @@ mod tests {
             let old_now = Utc::now();
             let mut dt = DateTime::now();
             let mut tf = TimeFreq::from_timestamp("28 0:0:0", true).unwrap();
-            dt.merge_timefreq(&mut tf).unwrap();
+            dt._merge_timefreq(&mut tf).unwrap();
 
             assert_eq!(dt.dt.second(), 0);
             assert_eq!(dt.dt.minute(), 0);
@@ -475,7 +564,7 @@ mod tests {
             let old_now = Utc::now();
             let mut dt = DateTime::now();
             let mut tf = TimeFreq::from_timestamp("9-1 0:0:0", true).unwrap();
-            dt.merge_timefreq(&mut tf).unwrap();
+            dt._merge_timefreq(&mut tf).unwrap();
 
             assert_eq!(dt.dt.second(), 0);
             assert_eq!(dt.dt.minute(), 0);
@@ -489,7 +578,7 @@ mod tests {
         fn merges_years() {
             let mut dt = DateTime::now();
             let mut tf = TimeFreq::from_timestamp("1001-1-1 0:0:0", true).unwrap();
-            dt.merge_timefreq(&mut tf).unwrap();
+            dt._merge_timefreq(&mut tf).unwrap();
 
             assert_eq!(dt.dt.second(), 0);
             assert_eq!(dt.dt.minute(), 0);
@@ -503,17 +592,17 @@ mod tests {
         fn returns_error_if_cannot_be_merged() {
             let mut dt = DateTime::now();
             let mut tf = TimeFreq::from_timestamp("25:70:90", true).unwrap();
-            let mut res = dt.merge_timefreq(&mut tf);
+            let mut res = dt._merge_timefreq(&mut tf);
             assert!(res.is_err());
 
             //Day cannot be 0, only if it is not part of the relative date
             tf = TimeFreq::from_timestamp("0-1-0 0:0:0", true).unwrap();
-            res = dt.merge_timefreq(&mut tf);
+            res = dt._merge_timefreq(&mut tf);
             assert!(res.is_err());
 
             //Month cannot be 0, only if it is not part of the relative date
             tf = TimeFreq::from_timestamp("1001-0-1 0:0:0", true).unwrap();
-            res = dt.merge_timefreq(&mut tf);
+            res = dt._merge_timefreq(&mut tf);
             assert!(res.is_err());
         }
     }
@@ -522,7 +611,7 @@ mod tests {
         use super::super::*;
 
         #[test]
-        fn works_in_common_cases() {
+        fn uses_current_time_as_reference() {
             // Will fail at every exact hour, but currently IDC
             let mut now = Utc::now();
             let min = now.minute() - 1;
@@ -548,6 +637,61 @@ mod tests {
             expected = format!("{}-{:0width$}-{:0width$} {:0width$}:{:0width$}:{}",
                 exp_dt.dt.year(), exp_dt.dt.month(), exp_dt.dt.day(), hr, "00", "00", width = 2);
             assert_eq!(dt.to_timestamp(None).unwrap(), expected);
+        }
+    }
+
+    mod _next_occurrence {
+        use super::super::*;
+
+        #[test]
+        fn correct_in_common_cases() {
+            let mut dt = DateTime::from_timestamp("2019-01-01 10:00:05", None).unwrap();
+            let mut next_occur = DateTime::_next_occurrence("04", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-01-01 10:01:04");
+
+            dt = DateTime::from_timestamp("2019-01-01 10:05:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("04:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-01-01 11:04:00");
+
+            dt = DateTime::from_timestamp("2019-01-01 10:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("09:02:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-01-02 09:02:00");
+
+            dt = DateTime::from_timestamp("2019-01-01 11:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("10:02:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-01-02 10:02:00");
+
+            dt = DateTime::from_timestamp("2019-01-01 10:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("00:00:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-01-02 00:00:00");
+
+            dt = DateTime::from_timestamp("2019-01-12 10:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("07 00:00:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-02-07 00:00:00");
+
+            dt = DateTime::from_timestamp("2019-03-12 10:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("02-01 00:00:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2020-02-01 00:00:00");
+
+            // Neccessary for defining one-shots in an unusual way
+            dt = DateTime::from_timestamp("2019-03-12 10:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("2020-01-01 00:00:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2020-01-01 00:00:00");
+        }
+
+        #[test]
+        fn handles_edge_cases() {
+            let mut dt = DateTime::from_timestamp("2019-01-30 10:00:00", None).unwrap();
+            let mut next_occur = DateTime::_next_occurrence("30 00:00:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-03-03 00:00:00");
+
+            dt = DateTime::from_timestamp("2019-07-31 12:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("31 11:30:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-08-31 11:30:00");
+
+            dt = DateTime::from_timestamp("2019-02-15 12:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("30 11:30:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-03-02 11:30:00");
         }
     }
 }

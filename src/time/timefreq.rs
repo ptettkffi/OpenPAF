@@ -7,7 +7,7 @@ enum DateOrTime {
 }
 
 // Enum for the largest non-zero member.
-#[derive(PartialEq, PartialOrd, Clone)]
+#[derive(PartialEq, PartialOrd)]
 pub enum Resolution {
     Year = 6,
     Month = 5,
@@ -169,10 +169,6 @@ impl TimeFreq {
             resolution: TimeFreq::get_resolution(date_arr[3], time_arr[3]),
             ..Default::default()
         })
-    }
-
-    pub fn from_epoch(epoch: u32) -> TimeFreq {
-        TimeFreq{seconds: epoch, ..Default::default()}
     }
 
     pub fn calc_duration(&self) -> i64 {
