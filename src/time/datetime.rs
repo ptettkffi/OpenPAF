@@ -8,19 +8,26 @@ use super::super::error::PafError;
 /// Constant for the application's accepted time format.
 const TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
-/// A simple wrapper around chrono::DateTime, allowing for
+/// A simple wrapper around `chrono::DateTime`, allowing for
 /// creating methods without overriding anything by accident
 pub struct DateTime {
     dt: ChronoDateTime<Utc>
 }
 
 impl DateTime {
-    /// Parses a timezone string, and returns a wrapped chrono_tz::Tz object, if it is valid
-    /// Returns a wrapped error, if it is not valid
+    /// Parses a timezone string, and returns a `chrono_tz::Tz` object, if it is valid.
+    /// Returns an error, if it is not valid.
     /// 
-    /// # Arguments
+    /// ## Arguments
     /// 
-    /// * `timezone` - A string representation of a valid timezone (e.g. UTC, GMT, CET)
+    /// * `timezone` - A string representation of a valid timezone (e.g. `"UTC"`, `"GMT"`, `"CET"`)
+    /// 
+    /// ## Examples
+    /// ```
+    /// let tz: Tz = _read_timezone(Some("CET")).unwrap(); // CET or CEST
+    /// 
+    /// let tz: Tz = _read_timezone(None).unwrap(); // UTC, same as providing Some("UTC")
+    /// ```
     fn _read_timezone(timezone: Option<&str>) -> Result<Tz, Box<Error>> {
         let raw_str = timezone.unwrap_or("UTC");
 
@@ -33,13 +40,33 @@ impl DateTime {
         Ok(tz)
     }
 
+    /// Utility function for checking a `chrono::DateTime` return value, and throwing an error, if there is none.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `result` - Result of a `chrono::DateTime` operation
+    /// * `msg` - An error message, which should be provided, if the operation failed
     fn _merge_error(result: Option<ChronoDateTime<Utc>>, msg: String) -> Result<ChronoDateTime<Utc>, Box<PafError>> {
+        // TODO: Move unwrapping and none-checking to caller methods, by using unwrap_or
         if result.is_none() {
             return Err(PafError::create_error(&msg));
         }
         Ok(result.unwrap())
     }
 
+    /// Utility method for merging a partial datetime with a `DateTime` object.
+    /// Used by `DateTime::next_occurrence()` for creating time references.
+    /// 
+    /// ## Arguments
+    /// 
+    /// * `timefreq` - A parsed partial datetime string to be merged
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt: DateTime = DateTime::now(); // Use current time as a starting point
+    /// let tf: TimeFreq = TimeFreq::from_timestamp("02-11 10:30:00", false) // A parsed partial time string
+    /// dt._merge_timefreq(tf).unwrap() // %Y-02-11 10:30:00, where %Y is current year
+    /// ```
     fn _merge_timefreq(&mut self, timefreq: &TimeFreq) -> Result<(), Box<Error>> {
         // Local variables for error handling
         let mut result;
@@ -95,11 +122,28 @@ impl DateTime {
         Ok(())
     }
 
+    /// Utility method for acquiring the last day in the current month (i.e. current month's size).
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt = DateTime::from_timestamp("2019-01-01 10:00:00", None).unwrap();
+    /// dt._get_last_day() // 31
+    /// ```
     fn _get_last_day(&self) -> u32 {
         NaiveDate::from_ymd_opt(self.dt.year(), self.dt.month() + 1, 1).unwrap_or(
             NaiveDate::from_ymd(self.dt.year() + 1, 1, 1)).pred().day() as u32
     }
 
+    /// Utility method for adding months, since months can be wrapped least trivially in a date.
+    /// (e.g. what is 31st of January + 1 month?)
+    /// 
+    /// We are using GNU date conventions; if a month transition cannot be done by incrementing the
+    /// month, we move forward by the numer of days in the mischevious month.
+    /// 
+    /// Cannot wrap around years, that is what `DateTime::add` is for.
+    /// 
+    /// ## Arguments
+    /// * `months`: Number of months to add
     fn _add_months(&mut self, months: i32) {
         // Try to add every month at once
         let res = self.dt.with_month((self.dt.month() as i32 + months) as u32);
@@ -110,7 +154,7 @@ impl DateTime {
             // If it fails, iterate through the months and resolve the error in place
             for _ in 0..months {
                 self.dt = self.dt.with_month(self.dt.month() + 1).unwrap_or(
-                    self.dt.with_day(self._get_last_day()).unwrap() + Duration::days(
+                    self.dt + Duration::days(
                         self._get_last_day() as i64
                     )
                 );
@@ -118,6 +162,16 @@ impl DateTime {
         }
     }
 
+    /// Utility method for subtracting months, since months can be wrapped least trivially in a date.
+    /// (e.g. what is 31st of March - 1 month?)
+    /// 
+    /// We are using GNU date conventions; if a month transition cannot be done by decrementing the
+    /// month, we move back by the numer of days in the mischevious month.
+    /// 
+    /// Cannot wrap around years, that is what `DateTime::subtract` is for.
+    /// 
+    /// ## Arguments
+    /// * `months`: Number of months to subtract
     fn _sub_months(&mut self, months: i32) {
         // Try to subtract every month at once
         let res = self.dt.with_month((self.dt.month() as i32 - months) as u32);
@@ -128,7 +182,7 @@ impl DateTime {
             // If it fails, iterate through the months and resolve the error in place
             for _ in 0..months {
                 self.dt = self.dt.with_month(self.dt.month() - 1).unwrap_or(
-                    self.dt.with_day(1).unwrap() - Duration::days(
+                    self.dt - Duration::days(
                         self._get_last_day() as i64
                     )
                 );
@@ -136,13 +190,14 @@ impl DateTime {
         }
     }
 
+    /// Utility method for calculating the next occurrence of a time pattern relative to
+    /// a `DateTime` object. For more information, see `DateTime::next_occurrence`.
     fn _next_occurrence(timestamp: &str, ref_date: &DateTime) -> Result<DateTime, Box<Error>> {
         let parsed: TimeFreq = TimeFreq::from_timestamp(timestamp, false)?;
 
         // Merge current time with available relative time components
         // e.g. if it's 2019-01-01 12:00:00 and the relative time is
         // 23:59:04, the result will be 2019-01-01 23:59:04
-        
         let mut merged = ref_date.clone();
         merged._merge_timefreq(&parsed)?;
 
@@ -172,10 +227,36 @@ impl DateTime {
         Ok(merged)
     }
 
+    /// Clones the current `DateTime` object.
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt = DateTime::now();
+    /// let cloned = dt.clone() // We can now do whatever without modifying dt
+    /// ```
     pub fn clone(&self) -> Self {
         Self { dt: self.dt.clone() }
     }
 
+    /// Tries to create a new `DateTime` object from a string. On failure,
+    /// it raises an error. If a timezone is provided, the string is
+    /// treated as local, and converted to UTC.
+    /// 
+    /// Time string must be formatted the following way: %Y-%m-%d %H:%M:%S
+    /// 
+    /// For valid timezone strings, see the [IANA database](https://www.iana.org/time-zones)
+    /// or a [browsable extract](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
+    /// 
+    /// ## Arguments
+    /// * `ts` - A datetime string
+    /// * `timezone` An optional timezone string
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap()
+    /// 
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", Some("CET")).unwrap()
+    /// ```
     pub fn from_timestamp(ts: &str, timezone: Option<&str>) -> Result<DateTime, Box<Error>> {
         let tz: Tz = DateTime::_read_timezone(timezone)?;
         let dt = tz.datetime_from_str(ts, TIMESTAMP_FORMAT)?.with_timezone(&Utc);
@@ -681,8 +762,8 @@ mod tests {
 
         #[test]
         fn handles_edge_cases() {
-            let mut dt = DateTime::from_timestamp("2019-01-30 10:00:00", None).unwrap();
-            let mut next_occur = DateTime::_next_occurrence("30 00:00:00", &dt).unwrap();
+            let mut dt = DateTime::from_timestamp("2019-01-31 10:00:00", None).unwrap();
+            let mut next_occur = DateTime::_next_occurrence("31 00:00:00", &dt).unwrap();
             assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-03-03 00:00:00");
 
             dt = DateTime::from_timestamp("2019-07-31 12:00:00", None).unwrap();
@@ -692,6 +773,82 @@ mod tests {
             dt = DateTime::from_timestamp("2019-02-15 12:00:00", None).unwrap();
             next_occur = DateTime::_next_occurrence("30 11:30:00", &dt).unwrap();
             assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-03-02 11:30:00");
+
+            dt = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap();
+            next_occur = DateTime::_next_occurrence("02-29 11:30:00", &dt).unwrap();
+            assert_eq!(next_occur.to_timestamp(None).unwrap(), "2019-03-01 11:30:00");
+        }
+    }
+
+    mod _add_months {
+        use super::super::*;
+
+        #[test]
+        fn handles_normal_cases() {
+            let mut timeobj = DateTime::from_timestamp("2018-08-15 10:30:00", None).unwrap();
+            timeobj._add_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-09-15 10:30:00");
+
+            timeobj._add_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-10-15 10:30:00");
+
+            timeobj._add_months(2);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-12-15 10:30:00");
+        }
+
+        #[test]
+        fn handles_edge_cases() {
+            let mut timeobj = DateTime::from_timestamp("2018-03-31 10:30:00", None).unwrap();
+            timeobj._add_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-05-01 10:30:00");
+
+            timeobj = DateTime::from_timestamp("2018-01-31 10:30:00", None).unwrap();
+            timeobj._add_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-03-03 10:30:00");
+
+            timeobj = DateTime::from_timestamp("2018-01-30 10:30:00", None).unwrap();
+            timeobj._add_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-03-02 10:30:00");
+
+            timeobj = DateTime::from_timestamp("2018-01-29 10:30:00", None).unwrap();
+            timeobj._add_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-03-01 10:30:00");
+        }
+    }
+
+    mod _sub_months {
+        use super::super::*;
+
+        #[test]
+        fn handles_normal_cases() {
+            let mut timeobj = DateTime::from_timestamp("2018-12-15 10:30:00", None).unwrap();
+            timeobj._sub_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-11-15 10:30:00");
+
+            timeobj._sub_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-10-15 10:30:00");
+
+            timeobj._sub_months(2);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-08-15 10:30:00");
+        }
+
+        #[test]
+        fn handles_edge_cases() {
+            let mut timeobj = DateTime::from_timestamp("2018-05-31 10:30:00", None).unwrap();
+            timeobj._sub_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-04-30 10:30:00");
+
+            timeobj = DateTime::from_timestamp("2018-03-31 10:30:00", None).unwrap();
+            timeobj._sub_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-02-28 10:30:00");
+
+            timeobj = DateTime::from_timestamp("2018-03-30 10:30:00", None).unwrap();
+            timeobj._sub_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-02-27 10:30:00");
+
+            timeobj = DateTime::from_timestamp("2018-03-29 10:30:00", None).unwrap();
+            timeobj._sub_months(1);
+            assert_eq!(timeobj.to_timestamp(None).unwrap(), "2018-02-26 10:30:00");
         }
     }
 }
