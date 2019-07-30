@@ -135,10 +135,10 @@ impl DateTime {
     }
 
     /// Utility method for adding months, since months can be wrapped least trivially in a date.
-    /// (e.g. what is 31st of January + 1 month?)
+    /// (e.g. what is January 31 + 1 month?)
     /// 
-    /// We are using GNU date conventions; if a month transition cannot be done by incrementing the
-    /// month, we move forward by the numer of days in the mischevious month.
+    /// The program uses GNU date conventions; if a month transition cannot be done by incrementing the
+    /// month, it moves forward by the numer of days in the mischevious month.
     /// 
     /// Cannot wrap around years, that is what `DateTime::add` is for.
     /// 
@@ -163,10 +163,10 @@ impl DateTime {
     }
 
     /// Utility method for subtracting months, since months can be wrapped least trivially in a date.
-    /// (e.g. what is 31st of March - 1 month?)
+    /// (e.g. what is March 31 - 1 month?)
     /// 
-    /// We are using GNU date conventions; if a month transition cannot be done by decrementing the
-    /// month, we move back by the numer of days in the mischevious month.
+    /// The program uses GNU date conventions; if a month transition cannot be done by decrementing the
+    /// month, it moves back by the numer of days in the mischevious month.
     /// 
     /// Cannot wrap around years, that is what `DateTime::subtract` is for.
     /// 
@@ -227,7 +227,7 @@ impl DateTime {
         Ok(merged)
     }
 
-    /// Clones the current `DateTime` object.
+    /// Clones the `DateTime` object.
     /// 
     /// ## Examples
     /// ```
@@ -253,9 +253,11 @@ impl DateTime {
     /// 
     /// ## Examples
     /// ```
-    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap()
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap();
+    /// assert_eq!(dt.to_timestamp(None), "2019-01-01 12:00:00");
     /// 
-    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", Some("CET")).unwrap()
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", Some("CET")).unwrap();
+    /// assert_eq!(dt.to_timestamp(None), "2019-01-01 11:00:00");
     /// ```
     pub fn from_timestamp(ts: &str, timezone: Option<&str>) -> Result<DateTime, Box<Error>> {
         let tz: Tz = DateTime::_read_timezone(timezone)?;
@@ -263,24 +265,71 @@ impl DateTime {
         Ok(DateTime {dt: dt})
     }
 
+    /// Creates a new `DateTime` object from an integer. The integer is
+    /// an epoch time, which is the number of seconds since January 1, 1970 UTC.
     pub fn from_epoch(epoch: i64) -> DateTime {
         DateTime {dt: Utc.timestamp(epoch, 0)}
     }
 
+    /// Creates a `DateTime` object from the current time in UTC.
     pub fn now() -> DateTime {
         DateTime {dt: Utc::now()}
     }
 
+    /// Serializes the `DateTime` object to a string. On failure,
+    /// it raises an error. If a timezone is provided, the string represents
+    /// time in the provided timezone.
+    /// 
+    /// Time string is formatted the following way: %Y-%m-%d %H:%M:%S
+    /// 
+    /// For valid timezone strings, see the [IANA database](https://www.iana.org/time-zones)
+    /// or a [browsable extract](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
+    /// 
+    /// ## Arguments
+    /// * `timezone` An optional timezone string
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap();
+    /// assert_eq!(dt.to_timestamp(None), "2019-01-01 12:00:00");
+    /// 
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", Some("CET")).unwrap();
+    /// assert_eq!(dt.to_timestamp(Some("CET")), "2019-01-01 12:00:00");
+    /// ```
     pub fn to_timestamp(&self, timezone: Option<&str>) -> Result<String, Box<Error>> {
         let tz: Tz = DateTime::_read_timezone(timezone)?;
         let stamp = self.dt.with_timezone(&tz).format(TIMESTAMP_FORMAT).to_string();
         Ok(stamp)
     }
 
+    /// Calculates and returns the epoch time (UNIX timestamp) from the current
+    /// `DateTime` object.
     pub fn to_epoch(&self) -> i64 {
         self.dt.timestamp()
     }
 
+    /// Adds a partial time to the `DateTime` object. Partial times must be
+    /// provided as strings in the general format %Y-%m-%d %H:%M:%S. The method
+    /// is void, but on failure, it raises an error.
+    /// 
+    /// For the exact rules of partial time strings, see the `TimeFreq` documentation.
+    /// 
+    /// Wraps around years. For non-trivial behavior with months, see
+    /// the documentation of `DateTime::_add_months`.
+    /// 
+    /// ## Arguments
+    /// * `timestamp` A partial time string
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap();
+    /// dt.add("3:15:30").unwrap();
+    /// assert_eq!(dt.to_timestamp(None), "2019-01-01 15:15:30");
+    /// 
+    /// let dt: DateTime = DateTime::from_timestamp("2019-08-01 12:00:00", None).unwrap();
+    /// dt.add("5-1 0:0:30")
+    /// assert_eq!(dt.to_timestamp(None), "2020-01-02 12:00:30");
+    /// ```
     pub fn add(&mut self, timestamp: &str) -> Result<(), Box<Error>> {
         let parsed: TimeFreq = TimeFreq::from_timestamp(timestamp, true)?;
 
@@ -308,6 +357,28 @@ impl DateTime {
         Ok(())
     }
 
+    /// Subtracts a partial time from the `DateTime` object. Partial times must be
+    /// provided as strings in the general format %Y-%m-%d %H:%M:%S. The method
+    /// is void, but on failure, it raises an error.
+    /// 
+    /// For the exact rules of partial time strings, see the `TimeFreq` documentation.
+    /// 
+    /// Wraps around years. For non-trivial behavior with months, see
+    /// the documentation of `DateTime::_sub_months`.
+    /// 
+    /// ## Arguments
+    /// * `timestamp` A partial time string
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap();
+    /// dt.subtract("3:15:30").unwrap();
+    /// assert_eq!(dt.to_timestamp(None), "2019-01-01 08:44:30");
+    /// 
+    /// let dt: DateTime = DateTime::from_timestamp("2019-08-05 12:00:00", None).unwrap();
+    /// dt.subtract("9-1 0:0:30")
+    /// assert_eq!(dt.to_timestamp(None), "2018-12-04 11:59:30");
+    /// ```
     pub fn subtract(&mut self, timestamp: &str) -> Result<(), Box<Error>> {
         let parsed: TimeFreq = TimeFreq::from_timestamp(timestamp, true)?;
 
@@ -336,6 +407,20 @@ impl DateTime {
         Ok(())
     }
 
+    /// Checks if the time represented by the `DateTime` object
+    /// has passed relative to another `DateTime` object. If no
+    /// reference is provided, the current time is used as a reference.
+    /// 
+    /// ## Arguments
+    /// * `ref_dt` A reference `DateTime` object
+    /// 
+    /// ## Examples
+    /// ```
+    /// let dt: DateTime = DateTime::from_timestamp("2018-01-01 12:00:00", None).unwrap();
+    /// let ref_dt: DateTime = DateTime::from_timestamp("2019-01-01 12:00:00", None).unwrap();
+    /// dt.is_passed(Some(ref_dt); // false
+    /// dt.is_passed(None); // true
+    /// ```
     pub fn is_passed(&self, ref_dt: Option<&DateTime>) -> bool {
         if let Some(dt) = ref_dt {
             dt.dt > self.dt
@@ -344,6 +429,30 @@ impl DateTime {
         }
     }
 
+    /// Calculates the next occurrence of a partial time string, and creates a
+    /// `DateTime` object as a result. If it fails, it raises an error. Partial
+    /// times must be provided as strings in the general format %Y-%m-%d %H:%M:%S.
+    /// 
+    /// For the exact rules of partial time strings, see the `TimeFreq` documentation.
+    /// 
+    /// Using it with days beyond 28, and with February 29 may cause unexpected results.
+    /// For more information, see the documentation of `DateTime::_add_months`.
+    /// 
+    /// ## Arguments
+    /// * `timestamp` A partial time string
+    /// 
+    /// ## Examples
+    /// ```
+    /// // It is 2019-07-26 12:00
+    /// let dt: DateTime = DateTime::next_occurrence("15:00:00").unwrap();
+    /// assert_eq!(dt.to_timestamp(None).unwrap(), "2019-07-26 15:00:00");
+    /// 
+    /// let dt: DateTime = DateTime::next_occurrence("10:00:00").unwrap();
+    /// assert_eq!(dt.to_timestamp(None).unwrap(), "2019-07-27 10:00:00");
+    /// 
+    /// let dt: DateTime = DateTime::next_occurrence("1 15:00:00").unwrap();
+    /// assert_eq!(dt.to_timestamp(None).unwrap(), "2019-08-01 15:00:00");
+    /// ```
     pub fn next_occurrence(timestamp: &str) -> Result<DateTime, Box<Error>> {
         let dt = DateTime::now();
 
