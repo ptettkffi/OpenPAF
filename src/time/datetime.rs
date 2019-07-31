@@ -82,9 +82,10 @@ impl DateTime {
         // We do not care about month-day pairing here, as month inputs also
         // have day inputs, and if the user provides 02-31, it is a user error
         if res >= &Resolution::Month {
-            result = self.dt.with_month(timefreq.months);
+            // Set days to 1, as it will be always valid, and if we have a month, we must also have a day for the next step
+            result = self.dt.with_day(1).unwrap().with_month(timefreq.months);
             self.dt = DateTime::_merge_error(result, format!("Invalid number of months {} in {}{:0w$}{}.", timefreq.months,
-                self.dt.format("%Y-"), timefreq.months, self.dt.format("%m-%d %H:%M:%S"), w = 2))?;
+                self.dt.format("%Y-"), timefreq.months, self.dt.format("-%d %H:%M:%S"), w = 2))?;
         }
 
         if res >= &Resolution::Day {
