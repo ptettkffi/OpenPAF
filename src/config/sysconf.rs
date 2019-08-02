@@ -9,7 +9,6 @@ use super::config::{GeneralConfig, Configuration};
 /// A strongly typed system configuration required for the OpenPAF binary.
 #[derive(Deserialize, Serialize)]
 pub struct SystemConfig {
-    //TODO: Get rid of genconf, and generate maps and text representations on demand
     pub modules: Vec<Module>,
     pub log: Option<String>,
     pub error_log: Option<String>,
@@ -18,8 +17,6 @@ pub struct SystemConfig {
     pub servers: Option<Vec<Server>>,
     pub io_timeout: Option<u64>,
     pub analysis_timeout: Option<u64>,
-    #[serde(skip)]
-    genconf: Option<GeneralConfig>
 }
 
 /// Default system configuration. Only used for filling in some optional parameters.
@@ -34,8 +31,7 @@ impl Default for SystemConfig {
             servers: None,
             modules: vec![Default::default()],
             io_timeout: Some(300),
-            analysis_timeout: Some(600),
-            genconf: None
+            analysis_timeout: Some(600)
         }
     }
 }
@@ -56,7 +52,7 @@ impl Configuration for SystemConfig {
         SystemConfig::read_config(&config)
     }
 
-    /// Reads a JSON configuration string, and create a `GeneralConfig` on
+    /// Reads a JSON configuration string, and create a `SystemConfig` on
     /// success. If fails, raises an error.
     /// 
     /// ## Arguments
@@ -65,21 +61,25 @@ impl Configuration for SystemConfig {
     /// ## Examples
     /// ```
     /// let json = r#"{
-    ///         "a": "b",
-    ///         "b": 5,
-    ///         "c": [1, 2, 3]
+    ///         "modules": [{
+    ///             "name": "dummy",
+    ///             "path": "dummy",
+    ///             "config": "dummy",
+    ///             "mod_type": "Analysis"
+    ///         }]
     ///     }"#;
-    /// let result = GeneralConfig::read_config(json).unwrap();
+    /// let result = SystemConfig::read_config(json).unwrap();
     /// ```
     fn read_config(config: &str) -> Result<SystemConfig, Box<Error>> {
         let mut parsed: SystemConfig = serde_json::from_str(config)?;
-        parsed.fill_defaults();
-        parsed.genconf = Some(GeneralConfig::read_config(&config).unwrap());
+        parsed._fill_defaults();
         Ok(parsed)
     }
 
-    fn as_map(&self) -> &Map<String, Value> {
-        self.genconf.as_ref().unwrap().as_map()
+    fn as_map(&self) -> Map<String, Value> {
+        let json = self.as_json();
+        let genconf = GeneralConfig::read_config(&json).unwrap();
+        genconf.as_map()
     }
 
     fn as_json(&self) -> String {
@@ -87,12 +87,14 @@ impl Configuration for SystemConfig {
     }
 
     fn as_text(&self) -> String {
-        self.genconf.as_ref().unwrap().as_text()
+        let json = self.as_json();
+        let genconf = GeneralConfig::read_config(&json).unwrap();
+        genconf.as_text()
     }
 }
 
 impl SystemConfig {
-    fn fill_defaults(&mut self) {
+    fn _fill_defaults(&mut self) {
         let defaults: SystemConfig = Default::default();
 
         if self.archive_dir.is_none() {
@@ -103,10 +105,6 @@ impl SystemConfig {
         }
         if self.analysis_timeout.is_none() {
             self.analysis_timeout = defaults.analysis_timeout;
-        }
-        // Just to make absolutely sure
-        if self.genconf.is_some() {
-            self.genconf = defaults.genconf;
         }
     }
 }

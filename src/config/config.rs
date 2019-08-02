@@ -8,7 +8,7 @@ pub trait Configuration {
     fn read_from_file(path: &str) -> Result<Self, Box<Error>> where Self: Sized;
     fn read_config(config: &str) -> Result<Self, Box<Error>> where Self: Sized;
 
-    fn as_map(&self) -> &Map<String, Value>;
+    fn as_map(&self) -> Map<String, Value>;
     fn as_json(&self) -> String;
     fn as_text(&self) -> String;
 }
@@ -64,10 +64,12 @@ impl Configuration for GeneralConfig {
     /// Returns the underlying configuration as a `serde_json::Map` object.
     /// 
     /// ## Examples
+    /// ```
     /// let map = config.as_map();
     /// println!("There are {} items in the configuration.", map.len());
-    fn as_map(&self) -> &Map<String, Value> {
-        &self.config
+    /// ```
+    fn as_map(&self) -> Map<String, Value> {
+        self.config.clone()
     }
 
     /// Serializes the unerlying configuration to a pretty printed JSON.
@@ -96,7 +98,7 @@ impl Configuration for GeneralConfig {
         // Functional optimization of a simple for loop iterating over KVPs (k, v) in a HashMap and serializing them
         self.as_map().into_iter().fold(
             "".to_string(), |text, (k, v)|
-                text + k.as_str() + " " + v.as_str().unwrap_or(&serde_json::to_string(v).unwrap_or("".to_string())) + "\n"
+                text + k.as_str() + " " + v.as_str().unwrap_or(&serde_json::to_string(&v).unwrap_or("".to_string())) + "\n"
         ).trim().to_string()
     }
 }
