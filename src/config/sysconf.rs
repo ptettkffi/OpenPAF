@@ -24,9 +24,9 @@ pub struct SystemConfig {
 impl Default for SystemConfig {
     fn default() -> SystemConfig {
         SystemConfig {
-            log: Some("openpaf.log".to_string()),
+            log: Some("/var/log/openpaf/openpaf.log".to_string()),
             error_log: None,
-            archive_dir: Some("~/archive".to_string()),
+            archive_dir: Some("~/.openpaf/archive".to_string()),
             main_server: None,
             servers: None,
             modules: vec![Default::default()],
