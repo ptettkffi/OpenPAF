@@ -1,3 +1,3 @@
 pub mod config;
 pub mod sysconf;
-pub mod entityconf;
+pub mod moduleconf;
