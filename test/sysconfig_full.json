@@ -1,0 +1,32 @@
+{
+    "modules": [
+        {
+            "name": "dummy",
+            "path": "dummy",
+            "config": "dummy",
+            "mod_type": "Analysis"
+        }
+    ],
+    "log": "test.log",
+    "error_log": "error.log",
+    "archive_dir": "archive",
+    "main_server": {
+        "name": "me",
+        "ip": "127.0.0.1",
+        "ssh_port": 22
+    },
+    "servers": [
+        {
+            "name": "me",
+            "ip": "127.0.0.1",
+            "ssh_port": 22
+        },
+        {
+            "name": "nextone",
+            "ip": "169.0.0.1",
+            "ssh_port": 22
+        }
+    ],
+    "io_timeout": 500,
+    "analysis_timeout": 1000
+}

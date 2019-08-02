@@ -61,13 +61,13 @@ impl Configuration for SystemConfig {
     /// ## Examples
     /// ```
     /// let json = r#"{
-    ///         "modules": [{
-    ///             "name": "dummy",
-    ///             "path": "dummy",
-    ///             "config": "dummy",
-    ///             "mod_type": "Analysis"
-    ///         }]
-    ///     }"#;
+    ///     "modules": [{
+    ///         "name": "dummy",
+    ///         "path": "dummy",
+    ///         "config": "dummy",
+    ///         "mod_type": "Analysis"
+    ///     }]
+    /// }"#;
     /// let result = SystemConfig::read_config(json).unwrap();
     /// ```
     fn read_config(config: &str) -> Result<SystemConfig, Box<Error>> {
@@ -76,16 +76,29 @@ impl Configuration for SystemConfig {
         Ok(parsed)
     }
 
+    /// Returns the underlying configuration as a `serde_json::Map` object.
+    /// 
+    /// ## Examples
+    /// ```
+    /// let map = config.as_map();
+    /// println!("There are {} items in the configuration.", map.len());
+    /// ```
     fn as_map(&self) -> Map<String, Value> {
         let json = self.as_json();
         let genconf = GeneralConfig::read_config(&json).unwrap();
         genconf.as_map()
     }
 
+    /// Serializes the unerlying configuration to a pretty printed JSON.
     fn as_json(&self) -> String {
         serde_json::to_string_pretty(&self).unwrap()
     }
 
+    /// Serializes the unerlying configuration to whitespace delimited key-value pairs.
+    /// If a value has depth > 1, serializes the value as a single line JSON string.
+    /// 
+    /// Using this method will result in parsing overhead. Use `SystemConfig::as_json`
+    /// instead.
     fn as_text(&self) -> String {
         let json = self.as_json();
         let genconf = GeneralConfig::read_config(&json).unwrap();
@@ -94,6 +107,7 @@ impl Configuration for SystemConfig {
 }
 
 impl SystemConfig {
+    /// Fills optional system configurations with default values, if absent.
     fn _fill_defaults(&mut self) {
         let defaults: SystemConfig = Default::default();
 
@@ -105,6 +119,19 @@ impl SystemConfig {
         }
         if self.analysis_timeout.is_none() {
             self.analysis_timeout = defaults.analysis_timeout;
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    mod read_from_file {
+        use super::super::*;
+
+        #[test]
+        fn reads_from_file() {
+            let res = SystemConfig::read_from_file("test/sysconfig_full.json");
+            assert!(res.is_ok());
         }
     }
 }

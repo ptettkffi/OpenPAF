@@ -111,7 +111,7 @@ mod test {
         #[test]
         fn can_read_from_file() {
             let res = GeneralConfig::read_from_file("test/config.json");
-            assert!(res.is_ok())
+            assert!(res.is_ok());
         }
     }
 
