@@ -1,10 +1,12 @@
-extern crate machine_ip;
-
 use std::error::Error;
+use serde::{Deserialize, Serialize};
+use machine_ip;
 use super::error::PafError;
 
 /// Struct representing individual servers in a server chain.
+#[derive(Deserialize, Serialize)]
 pub struct Server {
+    pub name: Option<String>,
     pub ip: String,
     pub ssh_port: u32
 }
@@ -80,10 +82,10 @@ mod test {
         #[test]
         fn sorts_servers() {
             let mut servers = vec![
-                Server {ip: "172.16.5.251".to_string(), ssh_port: 22},
-                Server {ip: "172.16.5.250".to_string(), ssh_port: 22},
-                Server {ip: "172.11.3.110".to_string(), ssh_port: 22},
-                Server {ip: "172.13.1.121".to_string(), ssh_port: 22}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: 22}
             ];
             Server::_sort(&mut servers);
 
@@ -116,10 +118,10 @@ mod test {
         fn identifies_current_ip() {
             let curr_ip = machine_ip::get().unwrap().to_string();
             let mut servers = vec![
-                Server {ip: "172.16.5.251".to_string(), ssh_port: 22},
-                Server {ip: "172.16.5.250".to_string(), ssh_port: 22},
-                Server {ip: curr_ip, ssh_port: 22},
-                Server {ip: "172.13.1.121".to_string(), ssh_port: 22}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: 22},
+                Server {name: None, ip: curr_ip, ssh_port: 22},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: 22}
             ];
 
             assert!(Server::next_server(&mut servers, None).is_ok())
@@ -128,10 +130,10 @@ mod test {
         #[test]
         fn errs_if_current_ip_not_in_list() {
             let mut servers = vec![
-                Server {ip: "172.16.5.251".to_string(), ssh_port: 22},
-                Server {ip: "172.16.5.250".to_string(), ssh_port: 22},
-                Server {ip: "172.11.3.110".to_string(), ssh_port: 22},
-                Server {ip: "172.13.1.121".to_string(), ssh_port: 22}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: 22}
             ];
 
             assert!(Server::next_server(&mut servers, None).is_err())
@@ -140,10 +142,10 @@ mod test {
         #[test]
         fn accepts_optional_ip() {
             let mut servers = vec![
-                Server {ip: "172.16.5.251".to_string(), ssh_port: 22},
-                Server {ip: "172.16.5.250".to_string(), ssh_port: 22},
-                Server {ip: "172.11.3.110".to_string(), ssh_port: 22},
-                Server {ip: "172.13.1.121".to_string(), ssh_port: 22}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: 22}
             ];
 
             assert!(Server::next_server(&mut servers, Some("172.16.5.250".to_string())).is_ok())
@@ -152,10 +154,10 @@ mod test {
         #[test]
         fn returns_correct_server() {
             let mut servers = vec![
-                Server {ip: "172.16.5.251".to_string(), ssh_port: 22},
-                Server {ip: "172.16.5.250".to_string(), ssh_port: 22},
-                Server {ip: "172.11.3.110".to_string(), ssh_port: 22},
-                Server {ip: "172.13.1.121".to_string(), ssh_port: 22}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: 22}
             ];
 
             assert_eq!(Server::next_server(&mut servers, Some("172.16.5.250".to_string())).unwrap().ip, "172.16.5.251");
