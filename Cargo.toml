@@ -3,7 +3,9 @@ name = "openpaf"
 version = "0.1.0"
 authors = ["GaborFarkas <raandal73@gmail.com>"]
 edition = "2018"
-exclude = ["test/"]
+exclude = ["/test/*"]
+license = "MIT"
+repository = "https://github.com/ptettkffi/OpenPAF"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
