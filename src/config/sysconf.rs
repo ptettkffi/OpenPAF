@@ -28,7 +28,7 @@ impl Default for SystemConfig {
             error_log: None,
             archive_dir: Some("~/.openpaf/archive".to_string()),
             main_server: None,
-            servers: None,
+            servers: Some(vec![]),
             modules: vec![Default::default()],
             io_timeout: Some(300),
             analysis_timeout: Some(600)
@@ -112,8 +112,14 @@ impl SystemConfig {
     fn _fill_defaults(&mut self) {
         let defaults: SystemConfig = Default::default();
 
+        if self.log.is_none() {
+            self.log = defaults.log;
+        }
         if self.archive_dir.is_none() {
             self.archive_dir = defaults.archive_dir;
+        }
+        if self.servers.is_none() {
+            self.servers = defaults.servers;
         }
         if self.io_timeout.is_none() {
             self.io_timeout = defaults.io_timeout;
@@ -129,8 +135,6 @@ impl SystemConfig {
             if let Some(serverlist) = &mut self.servers {
                 serverlist.push(server.clone());
                 Server::remove_duplicates(serverlist);
-            } else {
-                self.servers = Some(vec![]);
             }
         }
     }
@@ -145,6 +149,203 @@ mod test {
         fn reads_from_file() {
             let res = SystemConfig::read_from_file("test/sysconfig_full.json");
             assert!(res.is_ok());
+        }
+    }
+
+    mod read_config {
+        use super::super::*;
+
+        #[test]
+        fn does_not_need_optional_params() {
+            let conf = r#"{
+                "modules": [{
+                    "name": "",
+                    "path": "",
+                    "config": "",
+                    "mod_type": "Analysis"
+                }]
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf);
+            assert!(sysconf.is_ok());
+        }
+
+        #[test]
+        fn enforces_required_params() {
+            let conf = r#"{
+                "log": "test.log",
+                "error_log": "error.log",
+                "archive_dir": "archive"
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf);
+            assert!(sysconf.is_err());
+        }
+
+        #[test]
+        fn dumps_extra_params() {
+            let conf = r#"{
+                "modules": [{
+                    "name": "",
+                    "path": "",
+                    "config": "",
+                    "mod_type": "Analysis"
+                }],
+                "extra": 11
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf);
+            assert!(sysconf.is_ok());
+        }
+
+        #[test]
+        fn fills_optional_params() {
+            let conf = r#"{
+                "modules": [{
+                    "name": "",
+                    "path": "",
+                    "config": "",
+                    "mod_type": "Analysis"
+                }],
+                "extra": 11
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf).unwrap();
+            assert!(sysconf.log.is_some());
+            assert!(sysconf.archive_dir.is_some());
+            assert!(sysconf.servers.is_some());
+            assert!(sysconf.io_timeout.is_some());
+            assert!(sysconf.analysis_timeout.is_some());
+        }
+
+        #[test]
+        fn reads_servers() {
+            let conf = r#"{
+                "modules": [{
+                    "name": "",
+                    "path": "",
+                    "config": "",
+                    "mod_type": "Analysis"
+                }],
+                "main_server": {
+                    "name": "me",
+                    "ip": "127.0.0.1",
+                    "ssh_port": 22
+                },
+                "servers": [{
+                        "name": "nextone",
+                        "ip": "169.0.0.1",
+                        "ssh_port": 22
+                }],
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf).unwrap();
+            let main = sysconf.main_server.unwrap();
+            let servers = sysconf.servers.unwrap();
+
+            assert_eq!(main.name.unwrap(), "me".to_string());
+            assert_eq!(main.ip, "127.0.0.1".to_string());
+            assert_eq!(servers.len(), 2);
+        }
+    }
+
+    mod as_map {
+        use super::super::*;
+
+        #[test]
+        fn it_works() {
+            let conf = r#"{
+                "modules": [{
+                    "name": "",
+                    "path": "",
+                    "config": "",
+                    "mod_type": "Analysis"
+                }]
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf).unwrap();
+            sysconf.as_map();
+        }
+    }
+
+    mod as_json {
+        use super::super::*;
+
+        #[test]
+        fn it_works() {
+            let conf = r#"{
+                "modules": [{
+                    "name": "",
+                    "path": "",
+                    "config": "",
+                    "mod_type": "Analysis"
+                }]
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf).unwrap();
+            sysconf.as_json();
+        }
+    }
+
+    mod as_text {
+        use super::super::*;
+
+        #[test]
+        fn it_works() {
+            let conf = r#"{
+                "modules": [{
+                    "name": "",
+                    "path": "",
+                    "config": "",
+                    "mod_type": "Analysis"
+                }]
+            }"#;
+
+            let sysconf = SystemConfig::read_config(conf).unwrap();
+            sysconf.as_text();
+        }
+    }
+
+    mod _fill_defaults {
+        use super::super::*;
+
+        #[test]
+        fn fills_correct_values() {
+            let mut sysconf = SystemConfig{
+                modules: vec![Default::default()],
+                log: None,
+                error_log: None,
+                archive_dir: None,
+                main_server: None,
+                servers: None,
+                io_timeout: None,
+                analysis_timeout: None
+             };
+             let default = SystemConfig{..Default::default()};
+
+             sysconf._fill_defaults();
+
+             assert_eq!(sysconf.log.unwrap(), default.log.unwrap());
+             assert!(sysconf.error_log.is_none());
+             assert_eq!(sysconf.archive_dir.unwrap(), default.archive_dir.unwrap());
+             assert!(sysconf.main_server.is_none());
+             assert_eq!(sysconf.servers.unwrap().len(), default.servers.unwrap().len());
+             assert_eq!(sysconf.io_timeout.unwrap(), default.io_timeout.unwrap());
+             assert_eq!(sysconf.analysis_timeout.unwrap(), default.analysis_timeout.unwrap());
+        }
+    }
+
+    mod _sanitize_servers {
+        use super::super::*;
+
+        #[test]
+        fn adds_main_to_server_list() {
+
+        }
+
+        #[test]
+        fn removes_duplicates() {
+
         }
     }
 }
