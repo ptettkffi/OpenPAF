@@ -236,7 +236,7 @@ mod test {
                         "name": "nextone",
                         "ip": "169.0.0.1",
                         "ssh_port": 22
-                }],
+                }]
             }"#;
 
             let sysconf = SystemConfig::read_config(conf).unwrap();
@@ -245,7 +245,13 @@ mod test {
 
             assert_eq!(main.name.unwrap(), "me".to_string());
             assert_eq!(main.ip, "127.0.0.1".to_string());
+            assert_eq!(main.ssh_port, 22);
+
             assert_eq!(servers.len(), 2);
+            assert_eq!(servers[1].name.as_ref().unwrap(), "nextone");
+            assert_eq!(servers[1].ip, "169.0.0.1".to_string());
+            assert_eq!(servers[1].ssh_port, 22);
+            assert_eq!(servers[0].ip, "127.0.0.1".to_string());
         }
     }
 
@@ -340,12 +346,56 @@ mod test {
 
         #[test]
         fn adds_main_to_server_list() {
+            let mut sysconf = SystemConfig{
+                main_server: Some(Server {
+                    name: Some("me".to_string()),
+                    ip: "127.0.0.1".to_string(),
+                    ssh_port: 22
+                }),
+                servers: Some(vec![
+                    Server {
+                        name: Some("nextone".to_string()),
+                        ip: "192.16.1.1".to_string(),
+                        ssh_port: 22
+                    }
+                ]),
+                ..Default::default()
+             };
+             sysconf._sanitize_servers();
 
+             assert_eq!(sysconf.servers.unwrap().len(), 2);
         }
 
         #[test]
         fn removes_duplicates() {
+            let mut sysconf = SystemConfig{
+                main_server: Some(Server {
+                    name: Some("me".to_string()),
+                    ip: "127.0.0.1".to_string(),
+                    ssh_port: 22
+                }),
+                servers: Some(vec![
+                    Server {
+                        name: Some("nextone".to_string()),
+                        ip: "192.16.1.1".to_string(),
+                        ssh_port: 22
+                    },
+                    Server {
+                        name: Some("me".to_string()),
+                        ip: "127.0.0.1".to_string(),
+                        ssh_port: 22
+                    },
+                    Server {
+                        name: Some("nextone".to_string()),
+                        ip: "192.16.1.1".to_string(),
+                        ssh_port: 22
+                    }
+                ]),
+                ..Default::default()
+             };
+             sysconf._sanitize_servers();
 
+             assert_eq!(sysconf.servers.unwrap().len(), 2);
         }
     }
 }
