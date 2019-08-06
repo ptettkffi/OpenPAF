@@ -4,7 +4,7 @@ use machine_ip;
 use super::error::PafError;
 
 /// Struct representing individual servers in a server chain.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct Server {
     pub name: Option<String>,
     pub ip: String,
@@ -71,6 +71,11 @@ impl Server {
         } else {
             Err(PafError::create_error("Unable to extract current machine's IP."))
         }
+    }
+
+    pub fn remove_duplicates(servers: &mut Vec<Server>) {
+        Server::_sort(servers);
+        servers.dedup_by(|a, b| a.ip == b.ip);
     }
 }
 
@@ -162,6 +167,31 @@ mod test {
 
             assert_eq!(Server::next_server(&mut servers, Some("172.16.5.250".to_string())).unwrap().ip, "172.16.5.251");
             assert_eq!(Server::next_server(&mut servers, Some("172.16.5.251".to_string())).unwrap().ip, "172.11.3.110");
+        }
+    }
+
+    mod remove_duplicates {
+        use super::super::*;
+
+        #[test]
+        fn removes_duplicates() {
+            let mut servers = vec![
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: 22},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: 22}
+            ];
+            Server::remove_duplicates(&mut servers);
+
+            assert_eq!(servers.len(), 3);
+        }
+
+        #[test]
+        fn works_with_empty() {
+            let mut servers = vec![];
+            Server::remove_duplicates(&mut servers);
+
+            assert_eq!(servers.len(), 0);
         }
     }
 }

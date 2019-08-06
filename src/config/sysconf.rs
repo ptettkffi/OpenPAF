@@ -73,6 +73,7 @@ impl Configuration for SystemConfig {
     fn read_config(config: &str) -> Result<SystemConfig, Box<Error>> {
         let mut parsed: SystemConfig = serde_json::from_str(config)?;
         parsed._fill_defaults();
+        parsed._sanitize_servers();
         Ok(parsed)
     }
 
@@ -119,6 +120,18 @@ impl SystemConfig {
         }
         if self.analysis_timeout.is_none() {
             self.analysis_timeout = defaults.analysis_timeout;
+        }
+    }
+
+    /// Adds the main server to the server list, and removes duplicates.
+    fn _sanitize_servers(&mut self) {
+        if let Some(server) = &self.main_server {
+            if let Some(serverlist) = &mut self.servers {
+                serverlist.push(server.clone());
+                Server::remove_duplicates(serverlist);
+            } else {
+                self.servers = Some(vec![]);
+            }
         }
     }
 }

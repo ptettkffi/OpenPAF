@@ -17,11 +17,6 @@
     },
     "servers": [
         {
-            "name": "me",
-            "ip": "127.0.0.1",
-            "ssh_port": 22
-        },
-        {
             "name": "nextone",
             "ip": "169.0.0.1",
             "ssh_port": 22
