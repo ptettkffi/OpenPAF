@@ -12,14 +12,13 @@
     "archive_dir": "archive",
     "main_server": {
         "name": "me",
-        "ip": "127.0.0.1",
-        "ssh_port": 22
+        "ip": "127.0.0.1"
     },
     "servers": [
         {
             "name": "nextone",
             "ip": "169.0.0.1",
-            "ssh_port": 22
+            "ssh_port": 3102
         }
     ],
     "io_timeout": 500,
