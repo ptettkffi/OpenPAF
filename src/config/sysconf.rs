@@ -235,7 +235,8 @@ mod test {
                 "servers": [{
                         "name": "nextone",
                         "ip": "169.0.0.1",
-                        "ssh_port": 22
+                        "ssh_port": 22,
+                        "user": "my_username"
                 }]
             }"#;
 
@@ -251,6 +252,7 @@ mod test {
             assert_eq!(servers[1].name(), "nextone");
             assert_eq!(servers[1].ip(), "169.0.0.1".to_string());
             assert_eq!(servers[1].ssh_port(), 22);
+            assert_eq!(servers[1].user(), "my_username".to_string());
             assert_eq!(servers[0].ip(), "127.0.0.1".to_string());
         }
     }
@@ -350,12 +352,14 @@ mod test {
                 main_server: Some(Server::new(
                     Some("me".to_string()),
                     "127.0.0.1".to_string(),
+                    None,
                     None
                 )),
                 servers: Some(vec![
                     Server::new(
                         Some("nextone".to_string()),
                         "192.16.1.1".to_string(),
+                        None,
                         None
                     )
                 ]),
@@ -372,22 +376,26 @@ mod test {
                 main_server: Some(Server::new(
                     Some("me".to_string()),
                     "127.0.0.1".to_string(),
+                    None,
                     None
                 )),
                 servers: Some(vec![
                     Server::new(
                         Some("nextone".to_string()),
                         "192.16.1.1".to_string(),
+                        None,
                         None
                     ),
                     Server::new(
                         Some("me".to_string()),
                         "127.0.0.1".to_string(),
+                        None,
                         None
                     ),
                     Server::new(
                         Some("nextone".to_string()),
                         "192.16.1.1".to_string(),
+                        None,
                         None
                     )
                 ]),

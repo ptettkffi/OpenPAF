@@ -1,6 +1,7 @@
 use std::error::Error;
 use serde::{Deserialize, Serialize};
 use machine_ip;
+use whoami;
 use super::error::PafError;
 
 /// Struct representing individual servers in a server chain.
@@ -8,7 +9,8 @@ use super::error::PafError;
 pub struct Server {
     name: Option<String>,
     ip: String,
-    ssh_port: Option<u32>
+    ssh_port: Option<u32>,
+    user: Option<String>
 }
 
 impl Server {
@@ -38,11 +40,12 @@ impl Server {
     }
 
     /// Constructor for the `Server` struct. Creates a new server object.
-    pub fn new(name: Option<String>, ip: String, ssh_port: Option<u32>) -> Server {
+    pub fn new(name: Option<String>, ip: String, ssh_port: Option<u32>, user: Option<String>) -> Server {
         Server {
             name: name,
             ip: ip,
-            ssh_port: ssh_port
+            ssh_port: ssh_port,
+            user: user
         }
     }
 
@@ -124,6 +127,16 @@ impl Server {
     pub fn ssh_port(&self) -> u32 {
         self.ssh_port.unwrap_or(22)
     }
+
+    /// Returns the username associated with the current server.
+    /// If there is none, returns the username of the current machine.
+    pub fn user(&self) -> String {
+        if let Some(user) = &self.user {
+            user.to_string()
+        } else {
+            whoami::username()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -134,10 +147,10 @@ mod test {
         #[test]
         fn sorts_servers() {
             let mut servers = vec![
-                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None, user: None}
             ];
             Server::_sort(&mut servers);
 
@@ -168,11 +181,12 @@ mod test {
 
         #[test]
         fn creates_new() {
-            let server = Server::new(Some("name".to_string()), "172.11.3.110".to_string(), Some(2000));
+            let server = Server::new(Some("name".to_string()), "172.11.3.110".to_string(), Some(2000), Some("user".to_string()));
 
             assert_eq!(server.name.unwrap(), "name".to_string());
             assert_eq!(server.ip, "172.11.3.110".to_string());
             assert_eq!(server.ssh_port.unwrap(), 2000);
+            assert_eq!(server.user.unwrap(), "user".to_string());
         }
     }
 
@@ -183,10 +197,10 @@ mod test {
         fn identifies_current_ip() {
             let curr_ip = machine_ip::get().unwrap().to_string();
             let mut servers = vec![
-                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None},
-                Server {name: None, ip: curr_ip, ssh_port: None},
-                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: curr_ip, ssh_port: None, user: None},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None, user: None}
             ];
 
             assert!(Server::next_server(&mut servers, None).is_ok())
@@ -195,10 +209,10 @@ mod test {
         #[test]
         fn errs_if_current_ip_not_in_list() {
             let mut servers = vec![
-                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None, user: None}
             ];
 
             assert!(Server::next_server(&mut servers, None).is_err())
@@ -207,10 +221,10 @@ mod test {
         #[test]
         fn accepts_optional_ip() {
             let mut servers = vec![
-                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None, user: None}
             ];
 
             assert!(Server::next_server(&mut servers, Some("172.16.5.250".to_string())).is_ok())
@@ -219,10 +233,10 @@ mod test {
         #[test]
         fn returns_correct_server() {
             let mut servers = vec![
-                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.16.5.250".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None, user: None}
             ];
 
             assert_eq!(Server::next_server(&mut servers, Some("172.16.5.250".to_string())).unwrap().ip, "172.16.5.251");
@@ -236,10 +250,10 @@ mod test {
         #[test]
         fn removes_duplicates() {
             let mut servers = vec![
-                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None},
-                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None}
+                Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.11.3.110".to_string(), ssh_port: None, user: None},
+                Server {name: None, ip: "172.13.1.121".to_string(), ssh_port: None, user: None}
             ];
             Server::remove_duplicates(&mut servers);
 
@@ -260,8 +274,8 @@ mod test {
 
         #[test]
         fn returns_name_or_empty_string() {
-            let server = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None};
-            let named_server = Server {name: Some("me".to_string()), ip: "172.16.5.251".to_string(), ssh_port: None};
+            let server = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None};
+            let named_server = Server {name: Some("me".to_string()), ip: "172.16.5.251".to_string(), ssh_port: None, user: None};
 
             assert_eq!(server.name(), "".to_string());
             assert_eq!(named_server.name(), "me".to_string());
@@ -273,7 +287,7 @@ mod test {
 
         #[test]
         fn returns_ip() {
-            let server = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None};
+            let server = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None};
 
             assert_eq!(server.ip(), "172.16.5.251".to_string());
         }
@@ -284,11 +298,25 @@ mod test {
 
         #[test]
         fn returns_port_or_default() {
-            let server = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None};
-            let server_w_port = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: Some(3000)};
+            let server = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None};
+            let server_w_port = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: Some(3000), user: None};
 
             assert_eq!(server.ssh_port(), 22);
             assert_eq!(server_w_port.ssh_port(), 3000);
+        }
+    }
+
+    mod user {
+        use super::super::*;
+
+        #[test]
+        fn returns_user_or_default() {
+            let server = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: None};
+            let server_w_user = Server {name: None, ip: "172.16.5.251".to_string(), ssh_port: None, user: Some("me".to_string())};
+            let username = whoami::username();
+
+            assert_eq!(server.user(), username);
+            assert_eq!(server_w_user.user(), "me".to_string());
         }
     }
 }
