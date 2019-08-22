@@ -1,0 +1,7 @@
+{
+    "timeout": 50,
+    "params": {
+        "param1": "value1",
+        "param2": 5
+    }
+}

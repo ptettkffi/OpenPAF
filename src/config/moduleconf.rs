@@ -7,6 +7,7 @@ use postgres::{Connection as PostgresConnection, TlsMode as PostgresTlsMode};
 use super::config::{GeneralConfig, Configuration};
 use super::super::error::PafError;
 
+/// Enum for the three supported backends by OpenPAF.
 #[derive(Deserialize, Serialize)]
 enum DatabaseType {
     SQLite,
@@ -121,5 +122,52 @@ impl ModuleConfig {
         }
 
         self.params = Some(merged);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    fn check_postgres_connection() -> bool {
+        // In order to not fail PostgreSQL tests, create a local server structure with the following parameters:
+        // Database: openpaf
+        // Username: openpaf_user (must be a login user with select privilege to the openpaf table)
+        // Password: openpaf123
+        // Port: 5433
+        // Table: openpaf
+        // Columns: id (int), param (varchar), numeric (int), nullable (varchar)
+        // Add at least one row with VALUES (0, 'value', 12, NULL)
+        let cstr = "postgresql://openpaf_user:openpaf123@localhost:5433/openpaf";
+        let conn_res = PostgresConnection::connect(cstr, PostgresTlsMode::None);
+        if conn_res.is_err() {
+            panic!("Could not connect to PostgreSQL Server.");
+        }
+
+        let conn = conn_res.unwrap();
+        let query_res = &conn.query("SELECT * FROM openpaf WHERE id = 0", &[]);
+        if query_res.is_err() {
+            panic!("Could not query table openpaf with column id.");
+        }
+        true
+    }
+
+    mod read_from_file {
+        use super::super::*;
+
+        #[test]
+        fn reads_from_file() {
+            let res = ModuleConfig::read_from_file("test/moduleconfig.json");
+            assert!(res.is_ok());
+        }
+    }
+
+    mod _fill_with_postgres {
+        use super::super::*;
+        use super::*;
+
+        #[test]
+        fn check_connection() {
+            assert!(check_postgres_connection())
+        }
     }
 }
