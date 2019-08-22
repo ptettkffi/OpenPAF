@@ -2,11 +2,11 @@
     "modules": [
         {
             "name": "dummy",
-            "path": "dummy",
-            "config": "dummy",
             "mod_type": "Analysis"
         }
     ],
+    "module_dir": "/usr/lib/openpaf/modules",
+    "module_config_dir": "/etc/openpaf/config",
     "log": "test.log",
     "error_log": "error.log",
     "archive_dir": "archive",

@@ -10,8 +10,8 @@ pub enum ModuleType {
 #[derive(Deserialize, Serialize)]
 pub struct Module {
     pub name: String,
-    pub path: String,
-    pub config: String,
+    pub path: Option<String>,
+    pub config: Option<String>,
     pub mod_type: ModuleType
 }
 
@@ -20,8 +20,8 @@ impl Default for Module {
     fn default() -> Module {
         Module {
             name: "dummy".to_string(),
-            path: "dummy".to_string(),
-            config: "dummy".to_string(),
+            path: None,
+            config: None,
             mod_type: ModuleType::Analysis
         }
     }
