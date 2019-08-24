@@ -4,6 +4,8 @@ use std::error::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, Map, json};
 use postgres::{Connection as PostgresConnection, TlsMode as PostgresTlsMode};
+use postgres::rows::Row;
+use postgres::types::FromSql;
 use super::config::{GeneralConfig, Configuration};
 use super::super::error::PafError;
 
@@ -87,24 +89,51 @@ impl ModuleConfig {
         for (k, v) in self.as_map() {
             if let Some(val) = v.as_str() {
                 if let Some(info) = ModuleConfig::_read_db_string(val) {
-                    let query = format!("SELECT {} FROM {} WHERE {} = {}", info[0], info[1], info[2], info[3]);
+                    let query = format!("SELECT {} FROM {} WHERE {} = {}", info[1], info[0], info[2], info[3]);
                     let result = &conn.query(&query, &[])?;
                     if result.len() == 1 {
-                        let test_type = panic::catch_unwind(|| {
-                            let _: String = result.get(0).get(0);
-                        });
-                        if test_type.is_ok() {
+                        // Try to parse value. Supported types in order: String, i32, f32, f64, i64, bool.
+                        let row = result.get(0);
+                        if ModuleConfig::_postgres_try_parse::<String>(&row) {
                             let result_val: String = result.get(0).get(0);
+                            filled[&k] = json!(result_val);
+                        } else if ModuleConfig::_postgres_try_parse::<i32>(&row) {
+                            let result_val: i32 = result.get(0).get(0);
+                            filled[&k] = json!(result_val);
+                        } else if ModuleConfig::_postgres_try_parse::<f32>(&row) {
+                            let result_val: f32 = result.get(0).get(0);
+                            filled[&k] = json!(result_val);
+                        } else if ModuleConfig::_postgres_try_parse::<f64>(&row) {
+                            let result_val: f64 = result.get(0).get(0);
+                            filled[&k] = json!(result_val);
+                        } else if ModuleConfig::_postgres_try_parse::<i64>(&row) {
+                            let result_val: i64 = result.get(0).get(0);
+                            filled[&k] = json!(result_val);
+                        } else if ModuleConfig::_postgres_try_parse::<bool>(&row) {
+                            let result_val: bool = result.get(0).get(0);
                             filled[&k] = json!(result_val);
                         } else {
                             return Err(PafError::create_error(&format!("Invalid type found with query {}", query)));
                         }
+                    } else {
+                        return Err(PafError::create_error(&format!("Query ({}) did not return any rows.", query)));
                     }
                 }
             }
         }
         self.params = Some(filled);
         Ok(())
+    }
+
+    fn _postgres_try_parse<T>(row: &Row) -> bool where T: FromSql {
+        let test_type = panic::catch_unwind(|| {
+            let _: T = row.get(0);
+        });
+
+        if test_type.is_ok() {
+            return true;
+        }
+        false
     }
 
     fn _fill_with_mysql(&mut self) -> Result<(), Box<Error>> {
@@ -161,6 +190,49 @@ mod test {
         }
     }
 
+    mod read_config {
+        use super::super::*;
+
+        #[test]
+        fn works_without_db() {
+            let conf = r#"{
+                "params": {
+                    "param1": "value1"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_ok());
+        }
+
+        #[test]
+        fn with_db_needs_connection_string() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "params": {
+                    "param1": "value1"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
+
+        #[test]
+        fn fills_from_postgres() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:openpaf/param/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_ok());
+        }
+    }
+
     mod _fill_with_postgres {
         use super::super::*;
         use super::*;
@@ -168,6 +240,34 @@ mod test {
         #[test]
         fn check_connection() {
             assert!(check_postgres_connection())
+        }
+
+        #[test]
+        fn reads_string() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:openpaf/param/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], "value");
+        }
+
+        #[test]
+        fn reads_number() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:openpaf/numeric/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], 12);
         }
     }
 }
