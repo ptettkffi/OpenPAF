@@ -178,7 +178,7 @@ impl ModuleConfig {
             if let Some(val) = v.as_str() {
                 if let Some(info) = ModuleConfig::_read_db_string(val) {
                     let query = format!("SELECT {} FROM {} WHERE {} = {}", info[1], info[0], info[2], info[3]);
-                    let mut result = con.prepare(query.to_string()).unwrap().cursor();
+                    let mut result = con.prepare(query.to_string())?.cursor();
                     if let Some(row) = result.next()? {
                         match row[0].kind() {
                             sqlite::Type::String => filled[&k] = json!(row[0].as_string().unwrap()),
@@ -373,6 +373,48 @@ mod test {
             let modconf = ModuleConfig::read_config(conf).unwrap();
             assert_eq!(modconf.as_map()["param1"], Value::Null);
         }
+
+        #[test]
+        fn throws_error_with_no_rows() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:openpaf/nullable/id/9999"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
+
+        #[test]
+        fn throws_error_with_bad_column() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:openpaf/badcolumn/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
+
+        #[test]
+        fn throws_error_with_bad_table() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:badtable/nullable/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
     }
 
     mod _fill_with_mysql {
@@ -425,6 +467,48 @@ mod test {
             let modconf = ModuleConfig::read_config(conf).unwrap();
             assert_eq!(modconf.as_map()["param1"], Value::Null);
         }
+
+        #[test]
+        fn throws_error_with_no_rows() {
+            let conf = r#"{
+                "db": "MySQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "params": {
+                    "param1": "db:openpaf/nullable/id/9999"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
+
+        #[test]
+        fn throws_error_with_bad_column() {
+            let conf = r#"{
+                "db": "MySQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "params": {
+                    "param1": "db:openpaf/badcolumn/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
+
+        #[test]
+        fn throws_error_with_bad_table() {
+            let conf = r#"{
+                "db": "MySQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "params": {
+                    "param1": "db:badtable/nullable/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
     }
 
     mod _fill_with_sqlite {
@@ -470,6 +554,48 @@ mod test {
 
             let modconf = ModuleConfig::read_config(conf).unwrap();
             assert_eq!(modconf.as_map()["param1"], Value::Null);
+        }
+
+        #[test]
+        fn throws_error_with_no_rows() {
+            let conf = r#"{
+                "db": "SQLite",
+                "connection_string": "test/openpaf_sqlite.db",
+                "params": {
+                    "param1": "db:openpaf/nullable/id/9999"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
+
+        #[test]
+        fn throws_error_with_bad_column() {
+            let conf = r#"{
+                "db": "SQLite",
+                "connection_string": "test/openpaf_sqlite.db",
+                "params": {
+                    "param1": "db:openpaf/badcolumn/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
+        }
+
+        #[test]
+        fn throws_error_with_bad_table() {
+            let conf = r#"{
+                "db": "SQLite",
+                "connection_string": "test/openpaf_sqlite.db",
+                "params": {
+                    "param1": "db:badtable/nullable/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_err());
         }
     }
 }
