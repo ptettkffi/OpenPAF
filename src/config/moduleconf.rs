@@ -7,6 +7,8 @@ use postgres::{Connection as PostgresConnection, TlsMode as PostgresTlsMode};
 use postgres::rows::Row;
 use postgres::types::FromSql;
 use sqlite;
+use mysql;
+use mysql::consts::ColumnType;
 use super::config::{GeneralConfig, Configuration};
 use super::super::error::PafError;
 
@@ -138,6 +140,33 @@ impl ModuleConfig {
     }
 
     fn _fill_with_mysql(&mut self) -> Result<(), Box<Error>> {
+        let cstr = format!("mysql://{}", self.connection_string.as_ref().unwrap());
+        let conn = mysql::Pool::new(cstr)?;
+        let mut filled = self.as_map();
+
+        for (k, v) in self.as_map() {
+            if let Some(val) = v.as_str() {
+                if let Some(info) = ModuleConfig::_read_db_string(val) {
+                    let query = format!("SELECT {} FROM {} WHERE {} = {}", info[1], info[0], info[2], info[3]);
+                    let result = conn.first_exec(query.to_string(), ())?;
+                    if let Some(row) = result {
+                        match &row.columns()[0].column_type() {
+                            ColumnType::MYSQL_TYPE_STRING | ColumnType::MYSQL_TYPE_VARCHAR | ColumnType::MYSQL_TYPE_VAR_STRING =>
+                                filled[&k] = json!(mysql::from_row::<Option<String>>(row)),
+                            ColumnType::MYSQL_TYPE_INT24 | ColumnType::MYSQL_TYPE_LONG | ColumnType::MYSQL_TYPE_SHORT | ColumnType::MYSQL_TYPE_TINY =>
+                                filled[&k] = json!(mysql::from_row::<Option<i64>>(row)),
+                            ColumnType::MYSQL_TYPE_DECIMAL | ColumnType::MYSQL_TYPE_DOUBLE | ColumnType::MYSQL_TYPE_FLOAT =>
+                                filled[&k] = json!(mysql::from_row::<Option<f64>>(row)),
+                            _ => return Err(PafError::create_error(&format!("Invalid type found with query {}", query)))
+                        }
+                    } else {
+                        return Err(PafError::create_error(&format!("Query ({}) did not return any rows.", query)));
+                    }
+                }
+            }
+        }
+
+        self.params = Some(filled);
         Ok(())
     }
 
@@ -198,6 +227,29 @@ mod test {
 
         let conn = conn_res.unwrap();
         let query_res = &conn.query("SELECT * FROM openpaf WHERE id = 0", &[]);
+        if query_res.is_err() {
+            panic!("Could not query table openpaf with column id.");
+        }
+        true
+    }
+
+    fn check_mysql_connection() -> bool {
+        // In order to not fail MySQL tests, create a local server structure with the following parameters:
+        // Database: openpaf
+        // Username: openpaf_user (must have select privilege to the openpaf table)
+        // Password: openpaf123
+        // Port: 3306
+        // Table: openpaf
+        // Columns: id (int), param (varchar), number (int), nullable (varchar)
+        // Add at least one row with VALUES (0, 'value', 12, NULL)
+        let cstr = "mysql://openpaf_user:openpaf123@localhost:3306/openpaf";
+        let conn_res = mysql::Pool::new(cstr);
+        if conn_res.is_err() {
+            panic!("Could not connect to MySQL Server.");
+        }
+
+        let conn = conn_res.unwrap();
+        let query_res = conn.first_exec("SELECT * FROM openpaf WHERE id = 0", ());
         if query_res.is_err() {
             panic!("Could not query table openpaf with column id.");
         }
@@ -313,6 +365,58 @@ mod test {
             let conf = r#"{
                 "db": "PostgreSQL",
                 "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:openpaf/nullable/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], Value::Null);
+        }
+    }
+
+    mod _fill_with_mysql {
+        use super::super::*;
+        use super::*;
+
+        #[test]
+        fn check_connection() {
+            assert!(check_mysql_connection())
+        }
+
+        #[test]
+        fn reads_string() {
+            let conf = r#"{
+                "db": "MySQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "params": {
+                    "param1": "db:openpaf/param/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], "value");
+        }
+
+        #[test]
+        fn reads_number() {
+            let conf = r#"{
+                "db": "MySQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "params": {
+                    "param1": "db:openpaf/number/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], 12);
+        }
+
+        #[test]
+        fn reads_null() {
+            let conf = r#"{
+                "db": "MySQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
                 "params": {
                     "param1": "db:openpaf/nullable/id/0"
                 }
