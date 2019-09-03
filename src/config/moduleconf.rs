@@ -322,4 +322,50 @@ mod test {
             assert_eq!(modconf.as_map()["param1"], Value::Null);
         }
     }
+
+    mod _fill_with_sqlite {
+        use super::super::*;
+
+        #[test]
+        fn reads_string() {
+            let conf = r#"{
+                "db": "SQLite",
+                "connection_string": "test/openpaf_sqlite.db",
+                "params": {
+                    "param1": "db:openpaf/param/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], "value");
+        }
+
+        #[test]
+        fn reads_number() {
+            let conf = r#"{
+                "db": "SQLite",
+                "connection_string": "test/openpaf_sqlite.db",
+                "params": {
+                    "param1": "db:openpaf/numeric/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], 12);
+        }
+
+        #[test]
+        fn reads_null() {
+            let conf = r#"{
+                "db": "SQLite",
+                "connection_string": "test/openpaf_sqlite.db",
+                "params": {
+                    "param1": "db:openpaf/nullable/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], Value::Null);
+        }
+    }
 }
