@@ -6,6 +6,7 @@ use serde_json::{Value, Map, json};
 use postgres::{Connection as PostgresConnection, TlsMode as PostgresTlsMode};
 use postgres::rows::Row;
 use postgres::types::FromSql;
+use sqlite;
 use super::config::{GeneralConfig, Configuration};
 use super::super::error::PafError;
 
@@ -91,26 +92,26 @@ impl ModuleConfig {
                 if let Some(info) = ModuleConfig::_read_db_string(val) {
                     let query = format!("SELECT {} FROM {} WHERE {} = {}", info[1], info[0], info[2], info[3]);
                     let result = &conn.query(&query, &[])?;
-                    if result.len() == 1 {
+                    if result.len() != 0 {
                         // Try to parse value. Supported types in order: String, i32, f32, f64, i64, bool.
                         let row = result.get(0);
                         if ModuleConfig::_postgres_try_parse::<String>(&row) {
-                            let result_val: String = result.get(0).get(0);
+                            let result_val: Option<String> = result.get(0).get(0);
                             filled[&k] = json!(result_val);
                         } else if ModuleConfig::_postgres_try_parse::<i32>(&row) {
-                            let result_val: i32 = result.get(0).get(0);
+                            let result_val: Option<i32> = result.get(0).get(0);
                             filled[&k] = json!(result_val);
                         } else if ModuleConfig::_postgres_try_parse::<f32>(&row) {
-                            let result_val: f32 = result.get(0).get(0);
+                            let result_val: Option<f32> = result.get(0).get(0);
                             filled[&k] = json!(result_val);
                         } else if ModuleConfig::_postgres_try_parse::<f64>(&row) {
-                            let result_val: f64 = result.get(0).get(0);
+                            let result_val: Option<f64> = result.get(0).get(0);
                             filled[&k] = json!(result_val);
                         } else if ModuleConfig::_postgres_try_parse::<i64>(&row) {
-                            let result_val: i64 = result.get(0).get(0);
+                            let result_val: Option<i64> = result.get(0).get(0);
                             filled[&k] = json!(result_val);
                         } else if ModuleConfig::_postgres_try_parse::<bool>(&row) {
-                            let result_val: bool = result.get(0).get(0);
+                            let result_val: Option<bool> = result.get(0).get(0);
                             filled[&k] = json!(result_val);
                         } else {
                             return Err(PafError::create_error(&format!("Invalid type found with query {}", query)));
@@ -127,7 +128,7 @@ impl ModuleConfig {
 
     fn _postgres_try_parse<T>(row: &Row) -> bool where T: FromSql {
         let test_type = panic::catch_unwind(|| {
-            let _: T = row.get(0);
+            let _: Option<T> = row.get(0);
         });
 
         if test_type.is_ok() {
@@ -141,6 +142,29 @@ impl ModuleConfig {
     }
 
     fn _fill_with_sqlite(&mut self) -> Result<(), Box<Error>> {
+        let con = sqlite::open(self.connection_string.as_ref().unwrap())?;
+        let mut filled = self.as_map();
+
+        for (k, v) in self.as_map() {
+            if let Some(val) = v.as_str() {
+                if let Some(info) = ModuleConfig::_read_db_string(val) {
+                    let query = format!("SELECT {} FROM {} WHERE {} = {}", info[1], info[0], info[2], info[3]);
+                    let mut result = con.prepare(query.to_string()).unwrap().cursor();
+                    if let Some(row) = result.next()? {
+                        match row[0].kind() {
+                            sqlite::Type::String => filled[&k] = json!(row[0].as_string().unwrap()),
+                            sqlite::Type::Integer => filled[&k] = json!(row[0].as_integer().unwrap()),
+                            sqlite::Type::Float => filled[&k] = json!(row[0].as_float().unwrap()),
+                            sqlite::Type::Null => filled[&k] = json!(null),
+                            _ => return Err(PafError::create_error(&format!("Invalid type found with query {}", query)))
+                        }
+                    } else {
+                        return Err(PafError::create_error(&format!("Query ({}) did not return any rows.", query)));
+                    }
+                }
+            }
+        }
+        self.params = Some(filled);
         Ok(())
     }
 
@@ -231,6 +255,20 @@ mod test {
             let modconf = ModuleConfig::read_config(conf);
             assert!(modconf.is_ok());
         }
+
+        #[test]
+        fn fills_from_sqlite() {
+            let conf = r#"{
+                "db": "SQLite",
+                "connection_string": "test/openpaf_sqlite.db",
+                "params": {
+                    "param1": "db:openpaf/param/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf);
+            assert!(modconf.is_ok());
+        }
     }
 
     mod _fill_with_postgres {
@@ -268,6 +306,20 @@ mod test {
 
             let modconf = ModuleConfig::read_config(conf).unwrap();
             assert_eq!(modconf.as_map()["param1"], 12);
+        }
+
+        #[test]
+        fn reads_null() {
+            let conf = r#"{
+                "db": "PostgreSQL",
+                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "params": {
+                    "param1": "db:openpaf/nullable/id/0"
+                }
+            }"#;
+
+            let modconf = ModuleConfig::read_config(conf).unwrap();
+            assert_eq!(modconf.as_map()["param1"], Value::Null);
         }
     }
 }
