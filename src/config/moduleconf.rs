@@ -73,12 +73,13 @@ impl ModuleConfig {
         Ok(())
     }
 
-    fn _read_db_string(db_str: &str) -> Option<Vec<&str>> {
+    fn _read_db_string(db_str: &str) -> Option<Vec<String>> {
         if db_str.starts_with("db:") {
             let db_vec: Vec<&str> = db_str.split(":").collect();
             let db_info: Vec<&str> = db_vec[1].split("/").collect();
             if db_info.len() == 4 {
-                return Some(db_info);
+                let iter = db_info.into_iter().map(|i: &str| i.trim().replace(" ", "").replace("\n", "").replace(";", ""));
+                return Some(iter.collect());
             }
         }
         None
