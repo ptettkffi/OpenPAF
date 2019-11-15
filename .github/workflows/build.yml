@@ -1,0 +1,47 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build --verbose
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+        ports:
+        - 13306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+      postgres:
+        image: postgres:10.8
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+        - 5432:5432
+        options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=5
+    steps:
+    - uses: actions/checkout@v1
+    - name: Configure dependencies
+      run: |
+        sudo apt install postgresql-client
+        sudo service mysql stop
+        sudo bash -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'
+        sudo iptables -t nat -A PREROUTING -s 127.0.0.1 -p tcp --dport 3306 -j REDIRECT --to 13306
+        sudo iptables -t nat -A OUTPUT -s 127.0.0.1 -p tcp --dport 3306 -j REDIRECT --to 13306
+        sudo iptables -t nat -I OUTPUT -p tcp -o lo --dport 3306 -j REDIRECT --to-ports 13306
+    - name: Insert test data
+      run: |
+        psql "host=localhost port=${{ job.services.postgres.ports['5432'] }} user=postgres password=postgres" -c "CREATE DATABASE openpaf"
+        psql "host=localhost port=${{ job.services.postgres.ports['5432'] }} user=postgres dbname=openpaf password=postgres" -c "CREATE USER openpaf_user WITH PASSWORD 'openpaf123'; CREATE TABLE openpaf (id INT NOT NULL, param VARCHAR NOT NULL, numeric INT NOT NULL, nullable VARCHAR); INSERT INTO openpaf VALUES (0, 'value', 12, NULL); GRANT SELECT ON TABLE openpaf TO openpaf_user;"
+        mysql --host 127.0.0.1 --port 3306 -uroot -pmysql -e "CREATE DATABASE openpaf; use openpaf; CREATE TABLE openpaf (id INT NOT NULL, param VARCHAR(255) NOT NULL, number INT NOT NULL, nullable VARCHAR(255)); INSERT INTO openpaf VALUES (0, 'value', 12, NULL); CREATE USER 'openpaf_user' IDENTIFIED BY 'openpaf123'; GRANT SELECT ON openpaf.openpaf TO 'openpaf_user'; FLUSH PRIVILEGES;"
+    - name: Run tests
+      run: cargo test --verbose

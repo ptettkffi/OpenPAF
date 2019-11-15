@@ -471,7 +471,7 @@ mod test {
         fn reads_string() {
             let conf = r#"{
                 "db": "MySQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "connection_string": "openpaf_user:openpaf123@127.0.0.1:3306/openpaf",
                 "params": {
                     "param1": "db:openpaf/param/id/0"
                 }
@@ -485,7 +485,7 @@ mod test {
         fn reads_number() {
             let conf = r#"{
                 "db": "MySQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "connection_string": "openpaf_user:openpaf123@127.0.0.1:3306/openpaf",
                 "params": {
                     "param1": "db:openpaf/number/id/0"
                 }
@@ -499,7 +499,7 @@ mod test {
         fn reads_null() {
             let conf = r#"{
                 "db": "MySQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "connection_string": "openpaf_user:openpaf123@127.0.0.1:3306/openpaf",
                 "params": {
                     "param1": "db:openpaf/nullable/id/0"
                 }
@@ -513,7 +513,7 @@ mod test {
         fn throws_error_with_no_rows() {
             let conf = r#"{
                 "db": "MySQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "connection_string": "openpaf_user:openpaf123@127.0.0.1:3306/openpaf",
                 "params": {
                     "param1": "db:openpaf/nullable/id/9999"
                 }
@@ -527,7 +527,7 @@ mod test {
         fn throws_error_with_bad_column() {
             let conf = r#"{
                 "db": "MySQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "connection_string": "openpaf_user:openpaf123@127.0.0.1:3306/openpaf",
                 "params": {
                     "param1": "db:openpaf/badcolumn/id/0"
                 }
@@ -541,7 +541,7 @@ mod test {
         fn throws_error_with_bad_table() {
             let conf = r#"{
                 "db": "MySQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:3306/openpaf",
+                "connection_string": "openpaf_user:openpaf123@127.0.0.1:3306/openpaf",
                 "params": {
                     "param1": "db:badtable/nullable/id/0"
                 }
