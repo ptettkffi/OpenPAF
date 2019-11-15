@@ -103,7 +103,7 @@ impl Configuration for SystemConfig {
     /// If a value has depth > 1, serializes the value as a single line JSON string.
     /// 
     /// Using this method will result in parsing overhead. Use `SystemConfig::as_json`
-    /// instead.
+    /// when possible.
     fn as_text(&self) -> String {
         let json = self.as_json();
         let genconf = GeneralConfig::read_config(&json).unwrap();

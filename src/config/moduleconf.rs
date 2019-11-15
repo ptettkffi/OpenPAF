@@ -30,25 +30,63 @@ pub struct ModuleConfig {
 }
 
 impl Configuration for ModuleConfig {
+    /// Reads a JSON configuration file, and create a `ModuleConfig` on
+    /// success. If fails, raises an error.
+    /// 
+    /// ## Arguments
+    /// * `path` - Path to the configuration file
+    /// 
+    /// ## Examples
+    /// ```
+    /// let res = ModuleConfig::read_from_file("config.json").unwrap();
+    /// ```
     fn read_from_file(path: &str) -> Result<ModuleConfig, Box<Error>> {
         let config = fs::read_to_string(path)?;
         ModuleConfig::read_config(&config)
     }
 
+    /// Reads a JSON configuration string, and create a `ModuleConfig` on
+    /// success. If fails, raises an error.
+    /// 
+    /// ## Arguments
+    /// * `config` - A valid JSON object string
+    /// 
+    /// ## Examples
+    /// ```
+    /// let json = r#"{
+    ///     "params": {
+    ///         "module_parameter": "value"
+    ///     }
+    /// }"#;
+    /// let result = ModuleConfig::read_config(json).unwrap();
+    /// ```
     fn read_config(config: &str) -> Result<ModuleConfig, Box<Error>> {
         let mut parsed: ModuleConfig = serde_json::from_str(config)?;
         parsed._read_db_params()?;
         Ok(parsed)
     }
 
+    /// Returns module parameters as a `serde_json::Map` object.
+    /// 
+    /// ## Examples
+    /// ```
+    /// let map = config.as_map();
+    /// println!("There are {} items in the configuration.", map.len());
+    /// ```
     fn as_map(&self) -> Map<String, Value> {
         self.params.clone().unwrap_or(Map::new())
     }
 
+    /// Serializes the unerlying module parameters to a pretty printed JSON.
     fn as_json(&self) -> String {
         serde_json::to_string_pretty(&self.params).unwrap()
     }
 
+    /// Serializes the unerlying module parameters to whitespace delimited key-value pairs.
+    /// If a value has depth > 1, serializes the value as a single line JSON string.
+    /// 
+    /// Using this method will result in parsing overhead. Use `ModuleConfig::as_json`
+    /// when possible.
     fn as_text(&self) -> String {
         let json = self.as_json();
         let genconf = GeneralConfig::read_config(&json).unwrap();
@@ -57,6 +95,7 @@ impl Configuration for ModuleConfig {
 }
 
 impl ModuleConfig {
+    /// Private method for substituting DB pointer values with real values in module parameters.
     fn _read_db_params(&mut self) -> Result<(), Box<Error>> {
         if let Some(db) = &self.db {
             if self.connection_string.is_none() {
@@ -73,6 +112,7 @@ impl ModuleConfig {
         Ok(())
     }
 
+    /// Private method for parsing a DB pointer value in a module parameter.
     fn _read_db_string(db_str: &str) -> Option<Vec<String>> {
         if db_str.starts_with("db:") {
             let db_vec: Vec<&str> = db_str.split(":").collect();
