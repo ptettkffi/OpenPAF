@@ -1,4 +1,4 @@
-name: Rust
+name: Test
 
 on: [push]
 
@@ -9,6 +9,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: Install dependencies
+      run: sudo apt install postgresql mysql-server
+    - name: Insert test data
+      run: sudo test/create_db.sh
     - name: Build
       run: cargo build --verbose
     - name: Run tests

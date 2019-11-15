@@ -256,11 +256,11 @@ mod test {
         // Database: openpaf
         // Username: openpaf_user (must be a login user with select privilege to the openpaf table)
         // Password: openpaf123
-        // Port: 5433
+        // Port: 5432
         // Table: openpaf
         // Columns: id (int), param (varchar), numeric (int), nullable (varchar)
         // Add at least one row with VALUES (0, 'value', 12, NULL)
-        let cstr = "postgresql://openpaf_user:openpaf123@localhost:5433/openpaf";
+        let cstr = "postgresql://openpaf_user:openpaf123@localhost:5432/openpaf";
         let conn_res = PostgresConnection::connect(cstr, PostgresTlsMode::None);
         if conn_res.is_err() {
             panic!("Could not connect to PostgreSQL Server.");
@@ -339,7 +339,7 @@ mod test {
         fn fills_from_postgres() {
             let conf = r#"{
                 "db": "PostgreSQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "connection_string": "openpaf_user:openpaf123@localhost:5432/openpaf",
                 "params": {
                     "param1": "db:openpaf/param/id/0"
                 }
@@ -377,7 +377,7 @@ mod test {
         fn reads_string() {
             let conf = r#"{
                 "db": "PostgreSQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "connection_string": "openpaf_user:openpaf123@localhost:5432/openpaf",
                 "params": {
                     "param1": "db:openpaf/param/id/0"
                 }
@@ -391,7 +391,7 @@ mod test {
         fn reads_number() {
             let conf = r#"{
                 "db": "PostgreSQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "connection_string": "openpaf_user:openpaf123@localhost:5432/openpaf",
                 "params": {
                     "param1": "db:openpaf/numeric/id/0"
                 }
@@ -405,7 +405,7 @@ mod test {
         fn reads_null() {
             let conf = r#"{
                 "db": "PostgreSQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "connection_string": "openpaf_user:openpaf123@localhost:5432/openpaf",
                 "params": {
                     "param1": "db:openpaf/nullable/id/0"
                 }
@@ -419,7 +419,7 @@ mod test {
         fn throws_error_with_no_rows() {
             let conf = r#"{
                 "db": "PostgreSQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "connection_string": "openpaf_user:openpaf123@localhost:5432/openpaf",
                 "params": {
                     "param1": "db:openpaf/nullable/id/9999"
                 }
@@ -433,7 +433,7 @@ mod test {
         fn throws_error_with_bad_column() {
             let conf = r#"{
                 "db": "PostgreSQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "connection_string": "openpaf_user:openpaf123@localhost:5432/openpaf",
                 "params": {
                     "param1": "db:openpaf/badcolumn/id/0"
                 }
@@ -447,7 +447,7 @@ mod test {
         fn throws_error_with_bad_table() {
             let conf = r#"{
                 "db": "PostgreSQL",
-                "connection_string": "openpaf_user:openpaf123@localhost:5433/openpaf",
+                "connection_string": "openpaf_user:openpaf123@localhost:5432/openpaf",
                 "params": {
                     "param1": "db:badtable/nullable/id/0"
                 }
